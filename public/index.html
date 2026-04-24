@@ -3,12 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Hot Seat 🔥</title>
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <title>Festspill</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,700;1,9..144,400;1,9..144,500&family=Caveat:wght@500;700&display=swap" rel="stylesheet">
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
     :root {
+      /* Hot seat theme */
       --bg: #0c0b10;
       --bg2: #161420;
       --orange: #FF5500;
@@ -19,11 +22,26 @@
       --border: #2d2840;
     }
 
+    /* Paper theme (Hvem sendte det?) */
+    body[data-theme="paper"] {
+      --bg: #100e0b;
+      --paper: #f5efe0;
+      --paper-warm: #ece3cd;
+      --mustard: #d4a24a;
+      --terra: #c66a4a;
+      --sage: #7a8a6a;
+      --dusty: #c48a8a;
+      --slate: #6b7a8a;
+      --plum: #8a6b7a;
+      --ink: #100e0b;
+      --muted: rgba(245,239,224,0.45);
+    }
+
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
     body {
       background: var(--bg);
-      color: var(--white);
+      color: var(--white, #F4EFE8);
       font-family: 'DM Sans', sans-serif;
       min-height: 100dvh;
       display: flex;
@@ -32,16 +50,37 @@
       justify-content: center;
       padding: 20px;
       overflow-x: hidden;
+      position: relative;
     }
 
-    .screen { display: none; width: 100%; max-width: 420px; animation: fadeUp 0.35s ease; }
+    body[data-theme="paper"] {
+      color: #f5efe0;
+      background: #100e0b;
+    }
+    body[data-theme="paper"]::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' seed='9'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 0.95  0 0 0 0 0.85  0 0 0 0.05 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+      opacity: 0.5;
+      mix-blend-mode: screen;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .screen { display: none; width: 100%; max-width: 420px; animation: fadeUp 0.35s ease; position: relative; z-index: 1; }
     .screen.active { display: flex; flex-direction: column; gap: 16px; }
 
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(24px); }
       to { opacity: 1; transform: translateY(0); }
     }
+    @keyframes stampIn {
+      0% { opacity: 0; transform: rotate(0deg) scale(1.6); }
+      60% { opacity: 1; transform: rotate(10deg) scale(0.95); }
+      100% { opacity: 1; transform: rotate(var(--rot, 8deg)) scale(1); }
+    }
 
+    /* ─────────── HOT SEAT (default) ─────────── */
     h1.logo {
       font-family: 'Bebas Neue', sans-serif;
       font-size: clamp(64px, 20vw, 96px);
@@ -70,11 +109,11 @@
       line-height: 1.5;
     }
 
-    input {
+    input, textarea {
       background: var(--card);
       border: 1.5px solid var(--border);
       border-radius: 14px;
-      color: var(--white);
+      color: var(--white, #F4EFE8);
       font-family: 'DM Sans', sans-serif;
       font-size: 17px;
       font-weight: 500;
@@ -83,8 +122,8 @@
       outline: none;
       transition: border-color 0.2s;
     }
-    input:focus { border-color: var(--orange); }
-    input::placeholder { color: var(--muted); }
+    input:focus, textarea:focus { border-color: var(--orange); }
+    input::placeholder, textarea::placeholder { color: var(--muted); }
     input.uppercase { text-transform: uppercase; letter-spacing: 4px; }
 
     button {
@@ -101,45 +140,54 @@
     }
     button:active { transform: scale(0.97); }
 
-    .btn-primary {
-      background: var(--orange);
-      color: #fff;
-    }
-    .btn-secondary {
-      background: var(--card);
-      color: var(--white);
-      border: 1.5px solid var(--border);
-    }
-    .btn-teal {
-      background: var(--teal);
-      color: #0c0b10;
-    }
-    .btn-ghost {
-      background: transparent;
-      color: var(--muted);
-      font-size: 14px;
-    }
-    button:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-      transform: none;
-    }
+    .btn-primary { background: var(--orange); color: #fff; }
+    .btn-secondary { background: var(--card); color: var(--white, #F4EFE8); border: 1.5px solid var(--border); }
+    .btn-teal { background: var(--teal); color: #0c0b10; }
+    .btn-ghost { background: transparent; color: var(--muted); font-size: 14px; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 
     .divider {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      color: var(--muted);
-      font-size: 13px;
+      display: flex; align-items: center; gap: 12px;
+      color: var(--muted); font-size: 13px;
     }
     .divider::before, .divider::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--border);
+      content: ''; flex: 1; height: 1px; background: var(--border);
     }
 
-    /* Room code display */
+    /* Game picker cards */
+    .game-card {
+      background: var(--card);
+      border: 1.5px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      color: var(--white, #F4EFE8);
+      text-align: left;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: 100%;
+    }
+    .game-card .g-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28px;
+      letter-spacing: 1px;
+      color: var(--orange);
+    }
+    .game-card.paper .g-title {
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-weight: 500;
+      letter-spacing: -0.5px;
+      color: #d4a24a;
+      font-size: 30px;
+    }
+    .game-card .g-sub { color: var(--muted); font-size: 13px; font-weight: 500; }
+    .game-card .g-meta { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 2px; margin-top: 4px; }
+    .game-card.paper {
+      background: linear-gradient(135deg, #1a1713, #1f1a14);
+      border-color: rgba(212, 162, 74, 0.35);
+    }
+
     .room-code-box {
       background: var(--card);
       border: 1.5px solid var(--border);
@@ -157,20 +205,17 @@
     }
     .room-code-url { color: var(--muted); font-size: 13px; margin-top: 8px; word-break: break-all; }
 
-    /* QR code */
-    #qr-container { display: flex; justify-content: center; margin-top: 8px; }
-    #qr-container canvas, #qr-container img { border-radius: 12px; }
+    #qr-container, #qr-container-hsd { display: flex; justify-content: center; margin-top: 8px; }
+    #qr-container canvas, #qr-container img,
+    #qr-container-hsd canvas, #qr-container-hsd img { border-radius: 12px; }
 
-    /* Player list */
     .player-list { display: flex; flex-direction: column; gap: 8px; }
     .player-chip {
       background: var(--card);
       border: 1.5px solid var(--border);
       border-radius: 12px;
       padding: 12px 16px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
+      display: flex; align-items: center; gap: 12px;
       font-weight: 500;
       animation: fadeUp 0.25s ease;
     }
@@ -178,24 +223,14 @@
       width: 36px; height: 36px;
       border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
-      font-size: 16px;
-      font-weight: 700;
-      flex-shrink: 0;
+      font-size: 16px; font-weight: 700; flex-shrink: 0;
     }
     .player-chip .host-badge {
-      margin-left: auto;
-      font-size: 11px;
+      margin-left: auto; font-size: 11px;
       color: var(--orange);
-      text-transform: uppercase;
-      letter-spacing: 1px;
+      text-transform: uppercase; letter-spacing: 1px;
     }
 
-    .avatar-colors {
-      0: '#FF5500', 1: '#00E5C3', 2: '#9B5DE5', 3: '#F15BB5',
-      4: '#FEE440', 5: '#00BBF9'
-    }
-
-    /* Category card */
     .category-card {
       background: linear-gradient(135deg, #1e1b28, #241f33);
       border: 1.5px solid var(--border);
@@ -204,20 +239,15 @@
       text-align: center;
     }
     .category-label {
-      color: var(--muted);
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 3px;
-      margin-bottom: 12px;
+      color: var(--muted); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 3px; margin-bottom: 12px;
     }
     .category-text {
       font-family: 'Bebas Neue', sans-serif;
       font-size: clamp(36px, 10vw, 52px);
-      line-height: 1.1;
-      color: var(--teal);
+      line-height: 1.1; color: var(--teal);
     }
 
-    /* Hot seat warning */
     .hot-seat-card {
       background: linear-gradient(135deg, #2a0d00, #1f0900);
       border: 1.5px solid #ff5500aa;
@@ -225,35 +255,22 @@
       padding: 32px 24px;
       text-align: center;
     }
-    .hot-seat-card h2 {
-      color: var(--orange);
-      font-size: 40px;
-      margin-top: 8px;
-    }
+    .hot-seat-card h2 { color: var(--orange); font-size: 40px; margin-top: 8px; }
     .hot-seat-card p { color: #ffaa7799; font-size: 15px; margin-top: 8px; }
 
-    /* Word counter */
     .word-counter {
       background: var(--card);
       border-radius: 16px;
-      padding: 20px;
-      text-align: center;
+      padding: 20px; text-align: center;
       border: 1.5px solid var(--border);
     }
     .word-count-num {
       font-family: 'Bebas Neue', sans-serif;
-      font-size: 72px;
-      line-height: 1;
-      color: var(--orange);
+      font-size: 72px; line-height: 1; color: var(--orange);
     }
     .word-count-label { color: var(--muted); font-size: 13px; margin-top: 4px; }
 
-    /* Round result */
-    .result-card {
-      border-radius: 20px;
-      padding: 28px 24px;
-      text-align: center;
-    }
+    .result-card { border-radius: 20px; padding: 28px 24px; text-align: center; }
     .result-card.correct {
       background: linear-gradient(135deg, #001e18, #002d22);
       border: 1.5px solid #00E5C366;
@@ -269,9 +286,7 @@
     .result-sub { color: var(--muted); font-size: 14px; margin-top: 8px; }
     .result-category {
       font-family: 'Bebas Neue', sans-serif;
-      font-size: 44px;
-      margin-top: 16px;
-      line-height: 1.1;
+      font-size: 44px; margin-top: 16px; line-height: 1.1;
     }
 
     .error-msg {
@@ -286,58 +301,405 @@
     }
     .error-msg.show { display: block; }
 
-    /* Pulse animation for hot seat */
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.6; }
-    }
-    .pulse { animation: pulse 2s ease-in-out infinite; }
+    @keyframes pulse-anim { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+    .pulse { animation: pulse-anim 2s ease-in-out infinite; }
 
-    /* Bounce */
-    @keyframes bounce {
+    @keyframes bounce-anim {
       0%, 100% { transform: translateY(0); }
       50% { transform: translateY(-8px); }
     }
-
-    .waiting-dots span {
-      display: inline-block;
-      animation: bounce 1.2s ease-in-out infinite;
-    }
+    .waiting-dots span { display: inline-block; animation: bounce-anim 1.2s ease-in-out infinite; }
     .waiting-dots span:nth-child(2) { animation-delay: 0.2s; }
     .waiting-dots span:nth-child(3) { animation-delay: 0.4s; }
 
     .info-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: var(--muted);
-      font-size: 14px;
-      background: var(--card);
-      border-radius: 12px;
+      display: flex; align-items: center; gap: 8px;
+      color: var(--muted); font-size: 14px;
+      background: var(--card); border-radius: 12px;
       padding: 12px 16px;
     }
     .info-row .dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--teal);
-      flex-shrink: 0;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--teal); flex-shrink: 0;
     }
+
+    /* ─────────── PAPER THEME (Hvem sendte det?) ─────────── */
+    body[data-theme="paper"] h1.logo {
+      font-family: 'Fraunces', serif;
+      font-weight: 500;
+      font-style: italic;
+      font-size: clamp(56px, 16vw, 80px);
+      line-height: 0.92;
+      letter-spacing: -1.5px;
+      background: none;
+      -webkit-text-fill-color: #f5efe0;
+      color: #f5efe0;
+      text-align: left;
+    }
+    body[data-theme="paper"] h1.logo .it-normal { font-style: normal; font-weight: 400; }
+    body[data-theme="paper"] h1.logo .it-accent { color: #d4a24a; }
+
+    body[data-theme="paper"] h2 {
+      font-family: 'Fraunces', serif;
+      font-weight: 500;
+      font-style: italic;
+      letter-spacing: -0.3px;
+      color: #f5efe0;
+    }
+
+    body[data-theme="paper"] p.sub { color: rgba(245,239,224,0.65); }
+    body[data-theme="paper"] input,
+    body[data-theme="paper"] textarea {
+      background: rgba(245,239,224,0.04);
+      border: 1.5px solid rgba(245,239,224,0.18);
+      border-radius: 2px;
+      color: #f5efe0;
+      font-family: 'DM Sans', sans-serif;
+    }
+    body[data-theme="paper"] input:focus,
+    body[data-theme="paper"] textarea:focus { border-color: #d4a24a; }
+    body[data-theme="paper"] input::placeholder,
+    body[data-theme="paper"] textarea::placeholder { color: rgba(245,239,224,0.3); font-style: italic; }
+
+    body[data-theme="paper"] .btn-primary {
+      background: #d4a24a;
+      color: #100e0b;
+      border-radius: 2px;
+      box-shadow: 0 4px 0 rgba(0,0,0,0.5), 0 8px 16px -4px rgba(0,0,0,0.4);
+    }
+    body[data-theme="paper"] .btn-primary:disabled { background: rgba(212,162,74,0.4); box-shadow: none; }
+    body[data-theme="paper"] .btn-secondary {
+      background: transparent;
+      color: #f5efe0;
+      border: 1.5px solid rgba(245,239,224,0.3);
+      border-radius: 2px;
+    }
+    body[data-theme="paper"] .btn-ghost { color: rgba(245,239,224,0.55); }
+    body[data-theme="paper"] .divider::before,
+    body[data-theme="paper"] .divider::after { background: rgba(245,239,224,0.2); }
+
+    body[data-theme="paper"] .eyebrow {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 11px;
+      letter-spacing: 2.4px;
+      text-transform: uppercase;
+      color: rgba(245,239,224,0.45);
+      font-weight: 500;
+    }
+
+    /* paper card */
+    .paper-card {
+      position: relative;
+      background: #f5efe0;
+      color: #100e0b;
+      border-radius: 4px;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.04) inset, 0 12px 24px -12px rgba(0,0,0,0.55), 0 2px 4px rgba(0,0,0,0.25);
+      padding: 32px 26px;
+      transform: rotate(-1.6deg);
+    }
+    .paper-card.flat { transform: rotate(0); }
+    .paper-card .paper-noise {
+      position: absolute; inset: 0; border-radius: inherit;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0.35  0 0 0 0 0.3  0 0 0 0 0.22  0 0 0 0.08 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+      mix-blend-mode: multiply;
+      opacity: 0.55;
+      pointer-events: none;
+    }
+    .paper-card .paper-edge {
+      position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+      box-shadow: inset 0 0 24px rgba(90,70,40,0.08), inset 0 0 0 1px rgba(90,70,40,0.06);
+    }
+    .paper-tape {
+      position: absolute; top: -10px; left: 50%;
+      width: 64px; height: 22px;
+      transform: translateX(-50%) rotate(-4deg);
+      background: rgba(220,210,180,0.7);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      border-left: 1px dashed rgba(255,255,255,0.4);
+      border-right: 1px dashed rgba(255,255,255,0.4);
+    }
+    .paper-card .q-text {
+      position: relative; z-index: 1;
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-weight: 400;
+      font-size: 26px;
+      line-height: 1.22;
+      letter-spacing: -0.3px;
+      color: #100e0b;
+    }
+    .paper-card .q-sign {
+      position: relative; z-index: 1;
+      margin-top: 18px;
+      font-family: 'Caveat', cursive;
+      font-size: 18px;
+      color: rgba(16,14,11,0.55);
+      transform: rotate(-1deg);
+    }
+
+    .answer-card {
+      position: relative;
+      background: #f5efe0;
+      color: #100e0b;
+      border-radius: 4px;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.04) inset, 0 12px 24px -12px rgba(0,0,0,0.55), 0 2px 4px rgba(0,0,0,0.25);
+      padding: 36px 28px 44px;
+      transform: rotate(-1.2deg);
+      min-height: 160px;
+      display: flex; align-items: center;
+    }
+    .answer-card .paper-noise {
+      position: absolute; inset: 0; border-radius: inherit;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0.35  0 0 0 0 0.3  0 0 0 0 0.22  0 0 0 0.08 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+      mix-blend-mode: multiply; opacity: 0.55; pointer-events: none;
+    }
+    .answer-card .ruled-lines {
+      position: absolute; inset: 24px 14px; pointer-events: none;
+      background-image: repeating-linear-gradient(to bottom, transparent 0 27px, rgba(120,90,50,0.08) 27px 28px);
+      opacity: 0.7;
+    }
+    .answer-card .answer-text {
+      position: relative; z-index: 1;
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-size: 20px;
+      line-height: 1.35;
+      letter-spacing: -0.2px;
+      color: #100e0b;
+    }
+    .answer-card .corner-fold {
+      position: absolute; bottom: 0; right: 0; width: 22px; height: 22px;
+      background: linear-gradient(135deg, transparent 50%, rgba(140,110,70,0.25) 50%);
+    }
+
+    /* avatar grid */
+    .avatar-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px 8px;
+    }
+    .avatar-cell { display: grid; place-items: center; gap: 6px; cursor: pointer; }
+    .avatar-cell.dim { opacity: 0.35; }
+    .avatar-cell .av {
+      width: 54px; height: 54px; border-radius: 50%;
+      display: grid; place-items: center;
+      color: #f5efe0; font-family: 'DM Sans', sans-serif;
+      font-weight: 600; font-size: 20px; letter-spacing: 0.5px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3), inset 0 -2px 4px rgba(0,0,0,0.12);
+      transition: transform 200ms cubic-bezier(.2,.8,.2,1), box-shadow 200ms;
+    }
+    .avatar-cell.selected .av {
+      box-shadow: 0 0 0 3px #f5efe0, 0 0 0 5px #d4a24a, 0 6px 12px rgba(0,0,0,0.35);
+      transform: scale(1.08);
+    }
+    .avatar-cell .av-name {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 12px;
+      color: rgba(245,239,224,0.6);
+    }
+    .avatar-cell.selected .av-name { color: #f5efe0; font-weight: 600; }
+
+    /* wax stamp */
+    .wax-stamp {
+      position: relative; width: 200px; height: 200px;
+      display: grid; place-items: center; margin: 0 auto;
+    }
+    .wax-stamp .code {
+      font-family: 'Fraunces', serif;
+      font-weight: 700; font-size: 40px; letter-spacing: 3px;
+      color: #fbeedb;
+      text-shadow: 0 1px 0 rgba(0,0,0,0.35);
+      transform: rotate(-2deg);
+      position: relative; z-index: 1;
+    }
+
+    .progress-dashes {
+      display: flex; gap: 4px;
+    }
+    .progress-dashes .dash {
+      flex: 1; height: 2px;
+      background: rgba(245,239,224,0.15);
+      transition: background 200ms;
+    }
+    .progress-dashes .dash.on { background: #d4a24a; }
+
+    .pending-box {
+      padding: 16px;
+      border: 1.5px solid #d4a24a;
+      border-radius: 2px;
+      text-align: center;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      color: #d4a24a;
+      letter-spacing: 0.3px;
+    }
+
+    .pending-box .tdots { margin-top: 8px; display: flex; justify-content: center; gap: 6px; }
+    .pending-box .tdot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #d4a24a;
+      animation: pulse-anim 1.2s infinite ease-in-out;
+    }
+    .pending-box .tdot:nth-child(2) { animation-delay: 0.2s; }
+    .pending-box .tdot:nth-child(3) { animation-delay: 0.4s; }
+
+    .top-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      height: 32px; margin-bottom: 8px;
+    }
+    .top-bar .back-btn {
+      background: transparent;
+      color: rgba(245,239,224,0.7);
+      font-family: 'DM Sans', sans-serif; font-size: 13px;
+      padding: 0; width: auto;
+      border: none; letter-spacing: 0.5px; font-weight: 500;
+    }
+    .top-bar .right-slot {
+      min-width: 60px; text-align: right;
+      font-family: 'DM Sans', sans-serif; font-size: 12px;
+      color: rgba(245,239,224,0.55);
+    }
+
+    .score-big {
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-weight: 400;
+      font-size: 52px;
+      line-height: 1;
+      color: #d4a24a;
+      letter-spacing: -1px;
+      text-align: center;
+    }
+    .score-big .av-sub { color: #f5efe0; font-size: 28px; font-style: normal; }
+    .score-hand {
+      font-family: 'Caveat', cursive;
+      font-size: 22px;
+      color: rgba(245,239,224,0.6);
+      transform: rotate(-2deg);
+      text-align: center;
+      margin-top: 4px;
+    }
+
+    .reveal-card {
+      position: relative;
+      background: #f5efe0;
+      color: #100e0b;
+      border-radius: 4px;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.04) inset, 0 12px 24px -12px rgba(0,0,0,0.55), 0 2px 4px rgba(0,0,0,0.25);
+      padding: 20px 22px 18px;
+    }
+    .reveal-card .paper-noise {
+      position: absolute; inset: 0; border-radius: inherit;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0.35  0 0 0 0 0.3  0 0 0 0 0.22  0 0 0 0.08 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+      mix-blend-mode: multiply; opacity: 0.55; pointer-events: none;
+    }
+    .reveal-card .rv-text {
+      position: relative; z-index: 1;
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-size: 15px;
+      line-height: 1.4;
+      color: #100e0b;
+    }
+    .reveal-card .rv-divider {
+      position: relative; z-index: 1;
+      border-top: 1px dashed rgba(120,90,50,0.3);
+      margin: 14px 0 12px;
+    }
+    .reveal-card .rv-row {
+      position: relative; z-index: 1;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; min-height: 44px;
+    }
+    .reveal-card .rv-author {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .reveal-card .rv-author .av {
+      width: 34px; height: 34px; border-radius: 50%;
+      display: grid; place-items: center;
+      color: #f5efe0; font-family: 'DM Sans', sans-serif;
+      font-weight: 600; font-size: 13px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+    .reveal-card .rv-author-label {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 10px;
+      color: rgba(16,14,11,0.55);
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+    }
+    .reveal-card .rv-author-name {
+      font-family: 'Fraunces', serif;
+      font-weight: 500;
+      font-size: 17px;
+      color: #100e0b;
+    }
+    .reveal-card .rv-guess {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 11px;
+      color: rgba(16,14,11,0.55);
+      text-align: right;
+      line-height: 1.3;
+    }
+    .reveal-card .rv-guess span {
+      font-family: 'Fraunces', serif;
+      font-size: 14px; font-style: italic; font-weight: 500;
+    }
+    .reveal-card .rv-guess.correct span { color: #7a8a6a; }
+    .reveal-card .rv-guess.wrong span { color: #c66a4a; }
+    .reveal-stamp {
+      position: absolute; top: -12px; right: 8px; z-index: 3;
+      font-family: 'Caveat', cursive;
+      font-weight: 700; font-size: 28px;
+      text-shadow: 0 1px 0 rgba(0,0,0,0.1);
+      animation: stampIn 420ms cubic-bezier(.2,.8,.2,1) both;
+    }
+    .reveal-stamp.correct { color: #7a8a6a; transform: rotate(8deg); --rot: 8deg; }
+    .reveal-stamp.wrong { color: #c66a4a; transform: rotate(-8deg); --rot: -8deg; }
+
+    .hsd-progress-top {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font-family: 'DM Sans', sans-serif; font-size: 12px;
+      color: rgba(245,239,224,0.55);
+    }
+
+    /* top back button shared */
+    body[data-theme="paper"] .btn-ghost { font-size: 13px; }
   </style>
 </head>
-<body>
+<body data-theme="dark">
 
-<!-- HOME -->
-<div id="screen-home" class="screen active">
-  <h1 class="logo">HOT<br>SEAT</h1>
-  <p class="sub">Gjett kategorien mens de andre gir deg hint — ett ord om gangen.</p>
+<!-- GAME PICKER -->
+<div id="screen-picker" class="screen active">
+  <h2 style="font-size:28px; letter-spacing:0.5px; margin-bottom:4px;">Velg et spill</h2>
+  <p class="sub" style="margin-bottom:8px;">Pass rundt en telefon — alle spiller fra sin egen.</p>
+
+  <button class="game-card" onclick="selectGame('hotseat')">
+    <div class="g-title">HOT SEAT 🔥</div>
+    <div class="g-sub">Gjett kategorien ut fra hint — ett ord om gangen.</div>
+    <div class="g-meta">2+ spillere · 10 min</div>
+  </button>
+
+  <button class="game-card paper" onclick="selectGame('hvem-sendte-det')">
+    <div class="g-title">Hvem sendte det?</div>
+    <div class="g-sub">Svar anonymt. Gjett hvem som skrev hva. Avslør hemmeligheter.</div>
+    <div class="g-meta">3+ spillere · 15 min</div>
+  </button>
+</div>
+
+<!-- GAME HOME (after picking a game) -->
+<div id="screen-home" class="screen">
+  <h1 id="home-logo" class="logo">HOT<br>SEAT</h1>
+  <p class="sub" id="home-sub">Gjett kategorien mens de andre gir deg hint — ett ord om gangen.</p>
   <button class="btn-primary" onclick="showCreate()">Lag rom</button>
   <div class="divider">eller</div>
   <button class="btn-secondary" onclick="showJoin()">Bli med i rom</button>
+  <button class="btn-ghost" onclick="backToPicker()">← Velg annet spill</button>
 </div>
 
 <!-- CREATE -->
 <div id="screen-create" class="screen">
-  <div class="emoji-big">👑</div>
+  <div class="emoji-big" id="create-emoji">👑</div>
   <h2>Lag rom</h2>
   <input id="create-name" type="text" placeholder="Ditt navn" maxlength="20" autocomplete="off">
   <div id="create-error" class="error-msg"></div>
@@ -353,10 +715,12 @@
   <input id="join-name" type="text" placeholder="Ditt navn" maxlength="20" autocomplete="off">
   <div id="join-error" class="error-msg"></div>
   <button class="btn-primary" onclick="joinRoom()">Join</button>
-  <button class="btn-ghost" onclick="showScreen('screen-home')">← Tilbake</button>
+  <button class="btn-ghost" onclick="backFromJoin()">← Tilbake</button>
 </div>
 
-<!-- LOBBY (HOST) -->
+<!-- ================== HOT SEAT SCREENS ================== -->
+
+<!-- LOBBY (HOST) — HOT SEAT -->
 <div id="screen-lobby-host" class="screen">
   <div class="room-code-box">
     <div class="room-code-label">Romkode</div>
@@ -367,10 +731,10 @@
   <h2>Spillere <span id="player-count" style="color:var(--teal)">0</span></h2>
   <div id="lobby-player-list" class="player-list"></div>
   <button class="btn-primary" id="start-btn" onclick="startGame()" disabled>Start spillet</button>
-  <p class="sub" style="font-size:13px">Trenger minst 2 spillere</p>
+  <p class="sub" style="font-size:13px" id="start-min-hint">Trenger minst 2 spillere</p>
 </div>
 
-<!-- LOBBY (GUEST) -->
+<!-- LOBBY (GUEST) — HOT SEAT -->
 <div id="screen-lobby-guest" class="screen">
   <div class="info-row">
     <div class="dot"></div>
@@ -398,7 +762,7 @@
   </div>
   <p class="sub">De andre sier ord én om gangen.<br>Gjett når du tror du vet det!</p>
   <input id="guess-input" type="text" placeholder="Din gjetning..." autocomplete="off">
-  <button class="btn-orange btn-primary" onclick="submitGuess()">Gjett! 🎯</button>
+  <button class="btn-primary" onclick="submitGuess()">Gjett! 🎯</button>
 </div>
 
 <!-- PLAYING: CLUE GIVER -->
@@ -419,7 +783,7 @@
   <button class="btn-teal" onclick="wordSaid()">✓ Jeg sa et ord</button>
 </div>
 
-<!-- ROUND END -->
+<!-- ROUND END: HOT SEAT -->
 <div id="screen-result" class="screen">
   <div id="result-card" class="result-card">
     <div class="result-emoji" id="result-emoji">🎉</div>
@@ -435,6 +799,150 @@
   </div>
 </div>
 
+<!-- ================== HVEM SENDTE DET SCREENS ================== -->
+
+<!-- LOBBY (HOST) — HVEM -->
+<div id="screen-hsd-lobby-host" class="screen">
+  <div class="top-bar">
+    <div></div>
+    <div class="eyebrow">lobby</div>
+    <div></div>
+  </div>
+  <div class="eyebrow" style="text-align:center; margin-top:4px;">rom­kode</div>
+  <div class="wax-stamp" id="wax-stamp-host">
+    <svg width="200" height="200" style="position:absolute;inset:0;">
+      <defs>
+        <filter id="waxRough" x="-10%" y="-10%" width="120%" height="120%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="4" />
+          <feDisplacementMap in="SourceGraphic" scale="5" />
+        </filter>
+      </defs>
+      <circle cx="100" cy="100" r="88" fill="#c66a4a" filter="url(#waxRough)" opacity="0.95" />
+      <circle cx="100" cy="100" r="88" fill="none" stroke="rgba(0,0,0,0.25)" stroke-width="1" filter="url(#waxRough)" />
+      <circle cx="100" cy="100" r="72" fill="none" stroke="rgba(255,240,220,0.35)" stroke-width="1.5" stroke-dasharray="3 4" />
+      <path id="topArc" d="M 40 100 A 60 60 0 0 1 160 100" fill="none" />
+      <text font-family="DM Sans, sans-serif" font-size="9" letter-spacing="3" fill="rgba(255,240,220,0.7)" font-weight="600">
+        <textPath href="#topArc" startOffset="50%" text-anchor="middle">HVEM SENDTE DET</textPath>
+      </text>
+    </svg>
+    <div class="code" id="hsd-host-code">----</div>
+  </div>
+  <div style="font-family:'DM Sans',sans-serif; font-size:12px; letter-spacing:0.4px; color:rgba(245,239,224,0.5); text-align:center;">
+    Del koden med vennene dine
+  </div>
+  <div id="qr-container-hsd"></div>
+  <div class="hsd-progress-top">
+    <div class="eyebrow">spillere</div>
+    <div id="hsd-player-count-host">0 inne</div>
+  </div>
+  <div id="hsd-lobby-grid-host" class="avatar-grid"></div>
+  <button class="btn-primary" id="hsd-start-btn" onclick="startGame()" disabled>Start spillet</button>
+  <p class="sub" style="font-size:13px">Trenger minst 3 spillere</p>
+</div>
+
+<!-- LOBBY (GUEST) — HVEM -->
+<div id="screen-hsd-lobby-guest" class="screen">
+  <div class="top-bar">
+    <div></div>
+    <div class="eyebrow">lobby</div>
+    <div></div>
+  </div>
+  <div class="eyebrow" style="text-align:center; margin-top:4px;">rom­kode</div>
+  <div class="wax-stamp">
+    <svg width="200" height="200" style="position:absolute;inset:0;">
+      <circle cx="100" cy="100" r="88" fill="#c66a4a" filter="url(#waxRough)" opacity="0.95" />
+      <circle cx="100" cy="100" r="72" fill="none" stroke="rgba(255,240,220,0.35)" stroke-width="1.5" stroke-dasharray="3 4" />
+    </svg>
+    <div class="code" id="hsd-guest-code">----</div>
+  </div>
+  <div class="hsd-progress-top">
+    <div class="eyebrow">spillere</div>
+    <div id="hsd-player-count-guest">0 inne</div>
+  </div>
+  <div id="hsd-lobby-grid-guest" class="avatar-grid"></div>
+  <div class="pending-box">
+    Venter på at verten starter…
+    <div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div>
+  </div>
+</div>
+
+<!-- ANSWERING — HVEM -->
+<div id="screen-hsd-answering" class="screen">
+  <div class="top-bar">
+    <div class="eyebrow">spørsmålet</div>
+    <div class="right-slot" id="hsd-answer-progress">0/0 svart</div>
+  </div>
+  <div class="paper-card" style="margin-top:10px;">
+    <div class="paper-noise"></div>
+    <div class="paper-edge"></div>
+    <div class="paper-tape"></div>
+    <div class="q-text" id="hsd-question-text"></div>
+    <div class="q-sign">— vær ærlig.</div>
+  </div>
+
+  <div class="eyebrow" style="margin-top:22px;">ditt svar</div>
+  <div style="position:relative;">
+    <textarea id="hsd-answer-input" rows="4" maxlength="180"
+      placeholder="skriv noe ingen andre vet…"
+      style="padding:14px 14px 30px; resize:none; line-height:1.45;"></textarea>
+    <div id="hsd-answer-counter" style="position:absolute; right:10px; bottom:8px; font-family:'DM Sans',sans-serif; font-size:11px; color:rgba(245,239,224,0.4);">0/180</div>
+  </div>
+
+  <div style="display:flex; align-items:center; gap:8px; font-family:'DM Sans',sans-serif; font-size:12px; color:rgba(245,239,224,0.5);">
+    <svg width="12" height="14" viewBox="0 0 12 14" fill="none">
+      <rect x="1.5" y="6" width="9" height="7" rx="1" stroke="currentColor" stroke-width="1.3" />
+      <path d="M3.5 6V4a2.5 2.5 0 0 1 5 0v2" stroke="currentColor" stroke-width="1.3" />
+    </svg>
+    <span>ingen ser svaret ditt ennå</span>
+  </div>
+
+  <button class="btn-primary" id="hsd-submit-answer-btn" onclick="submitHsdAnswer()" disabled>Send inn anonymt</button>
+  <div id="hsd-answer-waiting" class="pending-box" style="display:none;">
+    sendt inn · venter på andre
+    <div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div>
+  </div>
+</div>
+
+<!-- VOTING — HVEM -->
+<div id="screen-hsd-voting" class="screen">
+  <div class="top-bar">
+    <div class="eyebrow">stem</div>
+    <div class="right-slot" id="hsd-vote-progress">1 / 1</div>
+  </div>
+  <div class="progress-dashes" id="hsd-progress-dashes"></div>
+  <div class="eyebrow" style="margin-top:18px;">hvem skrev dette?</div>
+
+  <div id="hsd-answer-slot" style="margin-top:10px; margin-bottom:10px;"></div>
+
+  <div class="eyebrow" style="margin-bottom:6px;">din gjetning</div>
+  <div id="hsd-vote-grid" class="avatar-grid"></div>
+
+  <button class="btn-primary" id="hsd-vote-next-btn" onclick="hsdVoteNext()" disabled>Neste svar →</button>
+  <div id="hsd-vote-waiting" class="pending-box" style="display:none;">
+    stemmer sendt · venter på andre
+    <div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div>
+  </div>
+</div>
+
+<!-- REVEAL — HVEM -->
+<div id="screen-hsd-reveal" class="screen">
+  <div class="top-bar">
+    <div></div>
+    <div class="eyebrow">resultat</div>
+    <div></div>
+  </div>
+  <div class="eyebrow" style="text-align:center; margin-top:12px;">du gjettet</div>
+  <div class="score-big" id="hsd-score-big">0 <span class="av-sub">av</span> 0</div>
+  <div class="score-hand" id="hsd-score-hand">detektivarbeid!</div>
+  <div id="hsd-reveal-list" style="margin-top:12px; display:flex; flex-direction:column; gap:24px;"></div>
+  <div id="hsd-host-result-btn" style="display:none; margin-top:12px;">
+    <button class="btn-primary" onclick="nextRound()">Neste runde →</button>
+  </div>
+  <div id="hsd-guest-result-msg" style="display:none; margin-top:12px;">
+    <p class="sub">Venter på verten…</p>
+  </div>
+</div>
+
 <script>
   const socket = io();
   let myName = '';
@@ -442,27 +950,85 @@
   let isHost = false;
   let currentWordCount = 0;
 
+  // Which game we're playing / picked
+  let currentGame = null; // 'hotseat' | 'hvem-sendte-det'
+
+  // Hvem sendte det? state
+  let hsdPlayers = []; // [{ name, idx }]
+  let hsdAnswers = []; // [{ text }]
+  let hsdVoteIdx = 0;
+  let hsdMyVotes = [];
+
   const AVATAR_COLORS = ['#FF5500','#00E5C3','#9B5DE5','#F15BB5','#FEE440','#00BBF9','#FF9F1C','#2EC4B6'];
+  const PAPER_COLORS  = ['#c48a8a','#7a8a6a','#d4a24a','#c66a4a','#6b7a8a','#8a6b7a','#a88a5a','#9a7a8a'];
+
+  function colorFor(i) {
+    const set = currentGame === 'hvem-sendte-det' ? PAPER_COLORS : AVATAR_COLORS;
+    return set[i % set.length];
+  }
 
   function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
+    const el = document.getElementById(id);
+    if (el) el.classList.add('active');
   }
 
-  function showCreate() { showScreen('screen-create'); }
+  function applyTheme(game) {
+    document.body.dataset.theme = game === 'hvem-sendte-det' ? 'paper' : 'dark';
+    const title = document.getElementById('home-logo');
+    const sub = document.getElementById('home-sub');
+    const emoji = document.getElementById('create-emoji');
+    if (game === 'hvem-sendte-det') {
+      title.innerHTML = 'Hvem<br><span class="it-normal">sendte</span><br><span class="it-accent">det?</span>';
+      sub.textContent = 'Svar anonymt. Gjett hvem som skrev hva. Avslør hemmeligheter.';
+      emoji.textContent = '✉️';
+      document.title = 'Hvem sendte det?';
+    } else {
+      title.innerHTML = 'HOT<br>SEAT';
+      sub.textContent = 'Gjett kategorien mens de andre gir deg hint — ett ord om gangen.';
+      emoji.textContent = '👑';
+      document.title = 'Hot Seat 🔥';
+    }
+  }
+
+  function selectGame(game) {
+    currentGame = game;
+    applyTheme(game);
+    showScreen('screen-home');
+  }
+
+  function backToPicker() {
+    currentGame = null;
+    applyTheme('hotseat'); // default theme
+    document.title = 'Festspill';
+    showScreen('screen-picker');
+  }
+
+  function showCreate() { showScreen('screen-create'); setTimeout(() => document.getElementById('create-name').focus(), 50); }
   function showJoin() {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
-    if (code) document.getElementById('join-code').value = code;
+    if (code) document.getElementById('join-code').value = code.toUpperCase();
     showScreen('screen-join');
+    setTimeout(() => {
+      (code ? document.getElementById('join-name') : document.getElementById('join-code')).focus();
+    }, 50);
+  }
+
+  function backFromJoin() {
+    // If code came from URL, go back to picker rather than home (user hasn't picked a game)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('code') && !currentGame) showScreen('screen-picker');
+    else showScreen('screen-home');
   }
 
   function createRoom() {
     const name = document.getElementById('create-name').value.trim();
     if (!name) return showError('create-error', 'Skriv inn navnet ditt');
+    if (!currentGame) return showError('create-error', 'Velg et spill først');
     myName = name;
     isHost = true;
-    socket.emit('create_room', { name });
+    socket.emit('create_room', { name, gameType: currentGame });
   }
 
   function joinRoom() {
@@ -477,7 +1043,6 @@
   function startGame() { socket.emit('start_game'); }
   function wordSaid() { socket.emit('word_said'); }
   function nextRound() { socket.emit('next_round'); }
-
   function submitGuess() {
     const guess = document.getElementById('guess-input').value.trim();
     if (!guess) return;
@@ -491,7 +1056,8 @@
     setTimeout(() => el.classList.remove('show'), 3000);
   }
 
-  function renderPlayers(players, listId, countId, hostId) {
+  // ───────── Shared lobby render ─────────
+  function renderHotSeatPlayers(players, listId, countId) {
     const list = document.getElementById(listId);
     const count = document.getElementById(countId);
     count.textContent = players.length;
@@ -500,45 +1066,109 @@
       const div = document.createElement('div');
       div.className = 'player-chip';
       const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
-      div.innerHTML = `
-        <div class="avatar" style="background:${color}22;color:${color}">${p.name[0].toUpperCase()}</div>
-        <span>${p.name}</span>
-        ${p.name === myName ? '<span style="color:var(--teal);font-size:12px;margin-left:auto">deg</span>' : ''}
-      `;
+      const initial = p.name[0].toUpperCase();
+      const youLabel = p.name === myName ? '<span style="color:var(--teal);font-size:12px;margin-left:auto">deg</span>' : '';
+      div.innerHTML =
+        '<div class="avatar" style="background:' + color + '22; color:' + color + '">' + initial + '</div>' +
+        '<span>' + escapeHtml(p.name) + '</span>' + youLabel;
       list.appendChild(div);
     });
   }
 
-  // Socket events
-  socket.on('room_created', ({ code }) => {
+  function renderHsdPlayers(players, gridId, countId) {
+    const grid = document.getElementById(gridId);
+    const count = document.getElementById(countId);
+    count.textContent = players.length + ' inne';
+    grid.innerHTML = '';
+    players.forEach((p, i) => {
+      const color = PAPER_COLORS[i % PAPER_COLORS.length];
+      const initials = p.name.split(' ').map(s => s[0] || '').slice(0,2).join('').toUpperCase();
+      const cell = document.createElement('div');
+      cell.className = 'avatar-cell';
+      cell.style.cursor = 'default';
+      cell.innerHTML =
+        '<div class="av" style="background:' + color + '">' + escapeHtml(initials) + '</div>' +
+        '<div class="av-name">' + escapeHtml(p.name) +
+          (i === 0 ? ' <span title="vert" style="color:#d4a24a">✦</span>' : '') +
+        '</div>';
+      grid.appendChild(cell);
+    });
+    // waiting slot
+    const waiting = document.createElement('div');
+    waiting.className = 'avatar-cell';
+    waiting.style.cursor = 'default';
+    waiting.style.opacity = '0.5';
+    waiting.innerHTML =
+      '<div class="av" style="background:transparent; border:1.5px dashed rgba(245,239,224,0.3); color:rgba(245,239,224,0.4); font-size:24px; box-shadow:none;">+</div>' +
+      '<div class="av-name" style="color:rgba(245,239,224,0.4)">venter…</div>';
+    grid.appendChild(waiting);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+  }
+
+  // ───────── Socket events ─────────
+  socket.on('room_created', ({ code, gameType }) => {
     myCode = code;
-    document.getElementById('display-code').textContent = code;
-    const url = `${window.location.origin}?code=${code}`;
-    document.getElementById('display-url').textContent = url;
-    // QR code
-    const qr = document.getElementById('qr-container');
-    qr.innerHTML = '';
-    new QRCode(qr, { text: url, width: 160, height: 160, colorDark: '#F4EFE8', colorLight: '#1e1b28' });
-    showScreen('screen-lobby-host');
+    currentGame = gameType;
+    applyTheme(gameType);
+
+    if (gameType === 'hvem-sendte-det') {
+      document.getElementById('hsd-host-code').textContent = code;
+      // QR
+      const url = window.location.origin + '?code=' + code;
+      const qr = document.getElementById('qr-container-hsd');
+      qr.innerHTML = '';
+      new QRCode(qr, { text: url, width: 140, height: 140, colorDark: '#f5efe0', colorLight: '#1a1713' });
+      showScreen('screen-hsd-lobby-host');
+    } else {
+      document.getElementById('display-code').textContent = code;
+      const url = window.location.origin + '?code=' + code;
+      document.getElementById('display-url').textContent = url;
+      const qr = document.getElementById('qr-container');
+      qr.innerHTML = '';
+      new QRCode(qr, { text: url, width: 160, height: 160, colorDark: '#F4EFE8', colorLight: '#1e1b28' });
+      showScreen('screen-lobby-host');
+    }
   });
 
-  socket.on('joined', ({ code }) => {
+  socket.on('joined', ({ code, gameType }) => {
     myCode = code;
-    document.getElementById('guest-display-code').textContent = code;
-    showScreen('screen-lobby-guest');
+    currentGame = gameType;
+    applyTheme(gameType);
+    if (gameType === 'hvem-sendte-det') {
+      document.getElementById('hsd-guest-code').textContent = code;
+      showScreen('screen-hsd-lobby-guest');
+    } else {
+      document.getElementById('guest-display-code').textContent = code;
+      showScreen('screen-lobby-guest');
+    }
   });
 
   socket.on('join_error', (msg) => showError('join-error', msg));
   socket.on('game_error', (msg) => alert(msg));
 
-  socket.on('lobby_update', (players) => {
-    renderPlayers(players, 'lobby-player-list', 'player-count');
-    renderPlayers(players, 'guest-player-list', 'guest-player-count');
-    const startBtn = document.getElementById('start-btn');
-    startBtn.disabled = players.length < 2;
-    startBtn.textContent = players.length < 2 ? 'Trenger minst 2 spillere' : `Start spillet (${players.length} spillere) →`;
+  socket.on('lobby_update', (data) => {
+    // tolerate old shape (array) too
+    const players = Array.isArray(data) ? data : data.players;
+    const gameType = Array.isArray(data) ? currentGame : data.gameType;
+    if (gameType === 'hvem-sendte-det') {
+      renderHsdPlayers(players, 'hsd-lobby-grid-host', 'hsd-player-count-host');
+      renderHsdPlayers(players, 'hsd-lobby-grid-guest', 'hsd-player-count-guest');
+      const startBtn = document.getElementById('hsd-start-btn');
+      startBtn.disabled = players.length < 3;
+      startBtn.textContent = players.length < 3 ? 'Trenger minst 3 spillere' : 'Start spillet (' + players.length + ' spillere)';
+    } else {
+      renderHotSeatPlayers(players, 'lobby-player-list', 'player-count');
+      renderHotSeatPlayers(players, 'guest-player-list', 'guest-player-count');
+      const startBtn = document.getElementById('start-btn');
+      startBtn.disabled = players.length < 2;
+      startBtn.textContent = players.length < 2 ? 'Trenger minst 2 spillere' : 'Start spillet (' + players.length + ' spillere) →';
+    }
   });
 
+  // ── Hot seat ──
   socket.on('round_start', ({ isHotSeat, category, hotSeatName }) => {
     currentWordCount = 0;
     if (isHotSeat) {
@@ -547,7 +1177,7 @@
       showScreen('screen-hotseat');
     } else {
       document.getElementById('clue-category-text').textContent = category;
-      document.getElementById('hotseat-name-display').textContent = `${hotSeatName} er i hot seat 🔥`;
+      document.getElementById('hotseat-name-display').textContent = hotSeatName + ' er i hot seat 🔥';
       document.getElementById('clue-word-count').textContent = '0';
       showScreen('screen-clue');
     }
@@ -564,20 +1194,179 @@
     document.getElementById('result-emoji').textContent = correct ? '🎉' : '💀';
     document.getElementById('result-title').textContent = correct ? 'Riktig!' : 'Feil!';
     document.getElementById('result-sub').textContent = correct
-      ? `${hotSeatName} gjettet riktig: "${guess}"`
-      : `${hotSeatName} gjettet "${guess}"`;
+      ? hotSeatName + ' gjettet riktig: "' + guess + '"'
+      : hotSeatName + ' gjettet "' + guess + '"';
     document.getElementById('result-category').textContent = category;
-
     const amHost = socket.id === hostId;
     document.getElementById('host-result-btn').style.display = amHost ? 'block' : 'none';
     document.getElementById('guest-result-msg').style.display = amHost ? 'none' : 'block';
     showScreen('screen-result');
   });
 
-  // Handle direct URL with code
+  // ── Hvem sendte det? ──
+  socket.on('hsd_round_start', ({ question, total }) => {
+    document.getElementById('hsd-question-text').innerHTML = escapeHtml(question);
+    const input = document.getElementById('hsd-answer-input');
+    input.value = '';
+    input.disabled = false;
+    document.getElementById('hsd-answer-counter').textContent = '0/180';
+    document.getElementById('hsd-submit-answer-btn').disabled = true;
+    document.getElementById('hsd-submit-answer-btn').style.display = 'block';
+    document.getElementById('hsd-answer-waiting').style.display = 'none';
+    document.getElementById('hsd-answer-progress').textContent = '0/' + total + ' svart';
+    showScreen('screen-hsd-answering');
+  });
+
+  socket.on('hsd_answer_count', ({ count, total }) => {
+    document.getElementById('hsd-answer-progress').textContent = count + '/' + total + ' svart';
+  });
+
+  socket.on('hsd_voting_start', ({ answers, players }) => {
+    hsdPlayers = players;
+    hsdAnswers = answers;
+    hsdVoteIdx = 0;
+    hsdMyVotes = new Array(answers.length).fill(null);
+    renderHsdVotingScreen();
+    document.getElementById('hsd-vote-next-btn').style.display = 'block';
+    document.getElementById('hsd-vote-waiting').style.display = 'none';
+    showScreen('screen-hsd-voting');
+  });
+
+  socket.on('hsd_vote_count', () => { /* could show progress if needed */ });
+
+  socket.on('hsd_reveal', ({ answers, players, myCorrect, total, isHost: hostId }) => {
+    document.getElementById('hsd-score-big').innerHTML = myCorrect + ' <span class="av-sub">av</span> ' + total;
+    const hand = document.getElementById('hsd-score-hand');
+    if (myCorrect === total) hand.textContent = 'detektivarbeid!';
+    else if (myCorrect >= Math.ceil(total / 2)) hand.textContent = 'ikke verst…';
+    else hand.textContent = 'kjente du dem i det hele tatt?';
+
+    const list = document.getElementById('hsd-reveal-list');
+    list.innerHTML = '';
+    answers.forEach((a, i) => {
+      const author = players[a.authorIdx] || { name: '?' };
+      const guess = (a.guessIdx != null) ? players[a.guessIdx] : null;
+      const correct = (a.guessIdx === a.authorIdx);
+      const rot = ((i % 2 === 0) ? -1 : 1) * (1.2 + (i % 3) * 0.4);
+      const color = PAPER_COLORS[a.authorIdx % PAPER_COLORS.length];
+      const initials = author.name.split(' ').map(s => s[0] || '').slice(0,2).join('').toUpperCase();
+      const card = document.createElement('div');
+      card.style.position = 'relative';
+      card.innerHTML =
+        '<div class="reveal-stamp ' + (correct ? 'correct' : 'wrong') + '">' +
+          (correct ? 'riktig!' : 'feil!') +
+        '</div>' +
+        '<div class="reveal-card" style="transform:rotate(' + rot + 'deg)">' +
+          '<div class="paper-noise"></div>' +
+          '<div class="rv-text">“' + escapeHtml(a.text) + '”</div>' +
+          '<div class="rv-divider"></div>' +
+          '<div class="rv-row">' +
+            '<div class="rv-author">' +
+              '<div class="av" style="background:' + color + '">' + escapeHtml(initials) + '</div>' +
+              '<div>' +
+                '<div class="rv-author-label">skrevet av</div>' +
+                '<div class="rv-author-name">' + escapeHtml(author.name) + '</div>' +
+              '</div>' +
+            '</div>' +
+            (guess ? (
+              '<div class="rv-guess ' + (correct ? 'correct' : 'wrong') + '">din gjetning<br><span>' + escapeHtml(guess.name) + '</span></div>'
+            ) : '<div class="rv-guess"></div>') +
+          '</div>' +
+        '</div>';
+      list.appendChild(card);
+    });
+
+    const amHost = socket.id === hostId;
+    document.getElementById('hsd-host-result-btn').style.display = amHost ? 'block' : 'none';
+    document.getElementById('hsd-guest-result-msg').style.display = amHost ? 'none' : 'block';
+
+    showScreen('screen-hsd-reveal');
+  });
+
+  // ── HSD: input handlers ──
+  (function bindHsdAnswerInput() {
+    const input = document.getElementById('hsd-answer-input');
+    input.addEventListener('input', () => {
+      const len = input.value.length;
+      document.getElementById('hsd-answer-counter').textContent = len + '/180';
+      document.getElementById('hsd-submit-answer-btn').disabled = !input.value.trim();
+    });
+  })();
+
+  function submitHsdAnswer() {
+    const text = document.getElementById('hsd-answer-input').value.trim();
+    if (!text) return;
+    socket.emit('hsd_submit_answer', { answer: text });
+    document.getElementById('hsd-answer-input').disabled = true;
+    document.getElementById('hsd-submit-answer-btn').style.display = 'none';
+    document.getElementById('hsd-answer-waiting').style.display = 'block';
+  }
+
+  function renderHsdVotingScreen() {
+    // progress dashes
+    const dashes = document.getElementById('hsd-progress-dashes');
+    dashes.innerHTML = '';
+    for (let i = 0; i < hsdAnswers.length; i++) {
+      const d = document.createElement('div');
+      d.className = 'dash' + (i <= hsdVoteIdx ? ' on' : '');
+      dashes.appendChild(d);
+    }
+    document.getElementById('hsd-vote-progress').textContent = (hsdVoteIdx + 1) + ' / ' + hsdAnswers.length;
+
+    // current answer
+    const cur = hsdAnswers[hsdVoteIdx];
+    const rot = ((hsdVoteIdx % 2 === 0) ? -1 : 1) * (1.2 + (hsdVoteIdx % 3) * 0.4);
+    const slot = document.getElementById('hsd-answer-slot');
+    slot.innerHTML =
+      '<div class="answer-card" style="transform:rotate(' + rot + 'deg)">' +
+        '<div class="paper-noise"></div>' +
+        '<div class="ruled-lines"></div>' +
+        '<div class="answer-text">“' + escapeHtml(cur.text) + '”</div>' +
+        '<div class="corner-fold"></div>' +
+      '</div>';
+
+    // voting avatars
+    const picked = hsdMyVotes[hsdVoteIdx];
+    const grid = document.getElementById('hsd-vote-grid');
+    grid.innerHTML = '';
+    hsdPlayers.forEach((p, i) => {
+      const color = PAPER_COLORS[p.idx % PAPER_COLORS.length];
+      const initials = p.name.split(' ').map(s => s[0] || '').slice(0,2).join('').toUpperCase();
+      const cell = document.createElement('div');
+      cell.className = 'avatar-cell' +
+        (picked === p.idx ? ' selected' : '') +
+        (picked != null && picked !== p.idx ? ' dim' : '');
+      cell.innerHTML =
+        '<div class="av" style="background:' + color + '">' + escapeHtml(initials) + '</div>' +
+        '<div class="av-name">' + escapeHtml(p.name) + '</div>';
+      cell.onclick = () => { hsdMyVotes[hsdVoteIdx] = p.idx; renderHsdVotingScreen(); };
+      grid.appendChild(cell);
+    });
+
+    const nextBtn = document.getElementById('hsd-vote-next-btn');
+    nextBtn.disabled = (picked == null);
+    nextBtn.textContent = (hsdVoteIdx + 1 < hsdAnswers.length) ? 'Neste svar →' : 'Send inn gjetninger →';
+  }
+
+  function hsdVoteNext() {
+    if (hsdMyVotes[hsdVoteIdx] == null) return;
+    if (hsdVoteIdx + 1 < hsdAnswers.length) {
+      hsdVoteIdx++;
+      renderHsdVotingScreen();
+    } else {
+      socket.emit('hsd_submit_votes', { votes: hsdMyVotes });
+      document.getElementById('hsd-vote-next-btn').style.display = 'none';
+      document.getElementById('hsd-vote-waiting').style.display = 'block';
+    }
+  }
+
+  // ── Direct URL with code ──
   window.addEventListener('load', () => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('code')) showJoin();
+    if (params.get('code')) {
+      // Skip picker — go straight to join. Game type is set when server responds.
+      showJoin();
+    }
   });
 </script>
 </body>

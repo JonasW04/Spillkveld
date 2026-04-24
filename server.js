@@ -29,6 +29,29 @@ const CATEGORIES = [
   "Aktiviteter i vann", "Ting man spiser til frokost"
 ];
 
+const QUESTIONS = [
+  "Hva er det verste du har gjort på jobb?",
+  "Hva angrer du mest på fra videregående?",
+  "Hva er den dummeste unnskyldningen du har brukt?",
+  "Hva ville du aldri fortalt foreldrene dine?",
+  "Hva er din mest pinlige date-historie?",
+  "Hvilken løgn har du gjentatt flest ganger?",
+  "Hva har du googlet som du håper ingen får se?",
+  "Hva er det verste du har sagt til en ekskjæreste?",
+  "Hva er det mest pinlige du har sendt noen ved en feil?",
+  "Hva gjemmer du unna når gjester kommer på besøk?",
+  "Hva er det dummeste du har kranglet med en partner om?",
+  "Hva er det siste du stjal — selv bare en liten ting?",
+  "Hva er din rareste vane som ingen vet om?",
+  "Hva er det mest flaue kjøpet i nettleser-historikken din?",
+  "Hva har du sagt på en date som du angret på umiddelbart?",
+  "Hva er det verste du har gjort mot en venn?",
+  "Hva er en hemmelighet du har holdt på siden barndommen?",
+  "Hva er det mest barnslige du fortsatt gjør som voksen?",
+  "Hva ville du aldri innrømt på første date?",
+  "Hva er den rareste drømmen du har hatt nylig?"
+];
+
 function generateCode() {
   return Math.random().toString(36).substring(2, 6).toUpperCase();
 }
@@ -43,11 +66,11 @@ function getLocalIP() {
   return 'localhost';
 }
 
-function startRound(code) {
+// ───────── HOT SEAT ─────────
+function startHotSeatRound(code) {
   const room = rooms[code];
   if (!room) return;
 
-  // Pick random hot seat (avoid repeating last if possible)
   let candidates = room.players.filter(p => p.name !== room.lastHotSeat);
   if (candidates.length === 0) candidates = room.players;
   const hotSeat = candidates[Math.floor(Math.random() * candidates.length)];
@@ -68,9 +91,75 @@ function startRound(code) {
   });
 }
 
+// ───────── HVEM SENDTE DET ─────────
+function startAnsweringRound(code) {
+  const room = rooms[code];
+  if (!room) return;
+
+  const question = QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)];
+  room.currentRound = {
+    question,
+    answers: [],
+    votes: {},
+    shuffled: null,
+  };
+  room.state = 'answering';
+
+  io.to(code).emit('hsd_round_start', {
+    question,
+    total: room.players.length,
+  });
+}
+
+function startVoting(code) {
+  const room = rooms[code];
+  if (!room) return;
+
+  const shuffled = [...room.currentRound.answers].sort(() => Math.random() - 0.5);
+  room.currentRound.shuffled = shuffled;
+  room.state = 'voting';
+
+  const playersPayload = room.players.map((p, i) => ({ name: p.name, idx: i }));
+
+  io.to(code).emit('hsd_voting_start', {
+    answers: shuffled.map(a => ({ text: a.text })),
+    players: playersPayload,
+  });
+}
+
+function showHsdResults(code) {
+  const room = rooms[code];
+  if (!room) return;
+
+  const shuffled = room.currentRound.shuffled;
+  room.state = 'reveal';
+
+  const playersPayload = room.players.map((p, i) => ({ name: p.name, idx: i }));
+
+  room.players.forEach(p => {
+    const myVotes = room.currentRound.votes[p.id] || [];
+    let correct = 0;
+    shuffled.forEach((ans, i) => {
+      if (myVotes[i] === ans.playerIdx) correct++;
+    });
+    io.to(p.id).emit('hsd_reveal', {
+      answers: shuffled.map((a, i) => ({
+        text: a.text,
+        authorIdx: a.playerIdx,
+        authorName: a.playerName,
+        guessIdx: myVotes[i] ?? null,
+      })),
+      players: playersPayload,
+      myCorrect: correct,
+      total: shuffled.length,
+      isHost: room.host,
+    });
+  });
+}
+
 io.on('connection', (socket) => {
 
-  socket.on('create_room', ({ name }) => {
+  socket.on('create_room', ({ name, gameType }) => {
     const code = generateCode();
     rooms[code] = {
       host: socket.id,
@@ -78,39 +167,60 @@ io.on('connection', (socket) => {
       state: 'lobby',
       currentRound: null,
       lastHotSeat: null,
+      gameType: gameType === 'hvem-sendte-det' ? 'hvem-sendte-det' : 'hotseat',
     };
     socket.join(code);
     socket.roomCode = code;
-    socket.emit('room_created', { code });
-    io.to(code).emit('lobby_update', rooms[code].players);
+    socket.emit('room_created', { code, gameType: rooms[code].gameType });
+    io.to(code).emit('lobby_update', { players: rooms[code].players, gameType: rooms[code].gameType });
   });
 
   socket.on('join_room', ({ code, name }) => {
-    const room = rooms[code.toUpperCase()];
+    const room = rooms[(code || '').toUpperCase()];
     if (!room) return socket.emit('join_error', 'Fant ikke rommet 🤔');
     if (room.state !== 'lobby') return socket.emit('join_error', 'Spillet er allerede i gang');
     if (room.players.find(p => p.name.toLowerCase() === name.toLowerCase())) {
       return socket.emit('join_error', 'Det er allerede en spiller med det navnet');
     }
+    const upper = code.toUpperCase();
     room.players.push({ id: socket.id, name });
-    socket.join(code.toUpperCase());
-    socket.roomCode = code.toUpperCase();
-    socket.emit('joined', { code: code.toUpperCase(), isHost: false, name });
-    io.to(code.toUpperCase()).emit('lobby_update', room.players);
+    socket.join(upper);
+    socket.roomCode = upper;
+    socket.emit('joined', { code: upper, isHost: false, name, gameType: room.gameType });
+    io.to(upper).emit('lobby_update', { players: room.players, gameType: room.gameType });
   });
 
   socket.on('start_game', () => {
     const code = socket.roomCode;
     const room = rooms[code];
     if (!room || room.host !== socket.id) return;
-    if (room.players.length < 2) return socket.emit('game_error', 'Trenger minst 2 spillere');
-    startRound(code);
+    const min = room.gameType === 'hvem-sendte-det' ? 3 : 2;
+    if (room.players.length < min) {
+      return socket.emit('game_error', `Trenger minst ${min} spillere`);
+    }
+    if (room.gameType === 'hvem-sendte-det') {
+      startAnsweringRound(code);
+    } else {
+      startHotSeatRound(code);
+    }
   });
 
+  socket.on('next_round', () => {
+    const code = socket.roomCode;
+    const room = rooms[code];
+    if (!room || room.host !== socket.id) return;
+    if (room.gameType === 'hvem-sendte-det') {
+      startAnsweringRound(code);
+    } else {
+      startHotSeatRound(code);
+    }
+  });
+
+  // ── Hot seat events ──
   socket.on('word_said', () => {
     const code = socket.roomCode;
     const room = rooms[code];
-    if (!room || !room.currentRound) return;
+    if (!room || !room.currentRound || room.gameType !== 'hotseat') return;
     room.currentRound.wordCount++;
     io.to(code).emit('word_count', room.currentRound.wordCount);
   });
@@ -118,7 +228,7 @@ io.on('connection', (socket) => {
   socket.on('make_guess', ({ guess }) => {
     const code = socket.roomCode;
     const room = rooms[code];
-    if (!room || !room.currentRound) return;
+    if (!room || !room.currentRound || room.gameType !== 'hotseat') return;
     if (socket.id !== room.currentRound.hotSeatId) return;
 
     const normalize = s => s.toLowerCase().trim().replace(/[^a-zæøå ]/gi, '');
@@ -134,11 +244,51 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('next_round', () => {
+  // ── Hvem sendte det events ──
+  socket.on('hsd_submit_answer', ({ answer }) => {
     const code = socket.roomCode;
     const room = rooms[code];
-    if (!room || room.host !== socket.id) return;
-    startRound(code);
+    if (!room || room.gameType !== 'hvem-sendte-det' || room.state !== 'answering') return;
+    const player = room.players.find(p => p.id === socket.id);
+    if (!player) return;
+    if (room.currentRound.answers.find(a => a.playerId === socket.id)) return;
+
+    const playerIdx = room.players.indexOf(player);
+    const text = String(answer || '').trim().slice(0, 200);
+    if (!text) return;
+
+    room.currentRound.answers.push({
+      playerId: socket.id,
+      playerName: player.name,
+      playerIdx,
+      text,
+    });
+
+    io.to(code).emit('hsd_answer_count', {
+      count: room.currentRound.answers.length,
+      total: room.players.length,
+    });
+
+    if (room.currentRound.answers.length === room.players.length) {
+      setTimeout(() => startVoting(code), 600);
+    }
+  });
+
+  socket.on('hsd_submit_votes', ({ votes }) => {
+    const code = socket.roomCode;
+    const room = rooms[code];
+    if (!room || room.gameType !== 'hvem-sendte-det' || room.state !== 'voting') return;
+    if (!Array.isArray(votes)) return;
+    room.currentRound.votes[socket.id] = votes;
+
+    io.to(code).emit('hsd_vote_count', {
+      count: Object.keys(room.currentRound.votes).length,
+      total: room.players.length,
+    });
+
+    if (Object.keys(room.currentRound.votes).length === room.players.length) {
+      setTimeout(() => showHsdResults(code), 400);
+    }
   });
 
   socket.on('disconnect', () => {
@@ -150,7 +300,7 @@ io.on('connection', (socket) => {
       delete rooms[code];
     } else {
       if (room.host === socket.id) room.host = room.players[0].id;
-      io.to(code).emit('lobby_update', room.players);
+      io.to(code).emit('lobby_update', { players: room.players, gameType: room.gameType });
       io.to(code).emit('player_left', socket.id);
     }
   });
@@ -159,8 +309,8 @@ io.on('connection', (socket) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   const ip = getLocalIP();
-  console.log('\n🔥 HOT SEAT er klart!\n');
+  console.log('\n🎮 Festspill-server klar!\n');
   console.log(`   Lokal:   http://localhost:${PORT}`);
   if (!process.env.PORT) console.log(`   Mobiler: http://${ip}:${PORT}\n`);
-  console.log('Klar!\n');
+  console.log('Spill:  Hot Seat  ·  Hvem sendte det?\n');
 });
