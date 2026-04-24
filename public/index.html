@@ -663,6 +663,68 @@
       color: rgba(245,239,224,0.55);
     }
 
+    .round-picker {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+    }
+    .round-chip {
+      width: 100%;
+      border: 1.5px solid rgba(245,239,224,0.3);
+      background: transparent;
+      color: #f5efe0;
+      border-radius: 2px;
+      padding: 10px 0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .round-chip.active {
+      background: #d4a24a;
+      color: #100e0b;
+      border-color: #d4a24a;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+    }
+
+    .leaderboard-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .leader-row {
+      display: grid;
+      grid-template-columns: 54px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      background: rgba(245,239,224,0.06);
+      border: 1.5px solid rgba(245,239,224,0.2);
+      border-radius: 2px;
+      padding: 12px 14px;
+      color: #f5efe0;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .leader-row.top-1 {
+      border-color: #d4a24a;
+      background: rgba(212,162,74,0.16);
+    }
+    .leader-rank {
+      font-family: 'Fraunces', serif;
+      font-weight: 700;
+      font-size: 24px;
+      color: #d4a24a;
+      text-align: center;
+    }
+    .leader-name {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+    }
+    .leader-score {
+      font-size: 14px;
+      color: rgba(245,239,224,0.75);
+      text-align: right;
+    }
+
     /* top back button shared */
     body[data-theme="paper"] .btn-ghost { font-size: 13px; }
   </style>
@@ -836,8 +898,16 @@
     <div id="hsd-player-count-host">0 inne</div>
   </div>
   <div id="hsd-lobby-grid-host" class="avatar-grid"></div>
+  <div class="eyebrow" style="margin-top:8px;">runder</div>
+  <div class="round-picker" id="hsd-round-picker">
+    <button class="round-chip" onclick="setHsdRounds(3)">3</button>
+    <button class="round-chip active" onclick="setHsdRounds(5)">5</button>
+    <button class="round-chip" onclick="setHsdRounds(7)">7</button>
+    <button class="round-chip" onclick="setHsdRounds(10)">10</button>
+    <button class="round-chip" onclick="setHsdRounds(15)">15</button>
+  </div>
   <button class="btn-primary" id="hsd-start-btn" onclick="startGame()" disabled>Start spillet</button>
-  <p class="sub" style="font-size:13px">Trenger minst 3 spillere</p>
+  <p class="sub" style="font-size:13px" id="hsd-start-hint">Trenger minst 3 spillere</p>
 </div>
 
 <!-- LOBBY (GUEST) — HVEM -->
@@ -860,6 +930,7 @@
     <div id="hsd-player-count-guest">0 inne</div>
   </div>
   <div id="hsd-lobby-grid-guest" class="avatar-grid"></div>
+  <div class="sub" style="font-size:13px; margin-top:2px;" id="hsd-rounds-guest">Runder: 5</div>
   <div class="pending-box">
     Venter på at verten starter…
     <div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div>
@@ -934,6 +1005,7 @@
   <div class="eyebrow" style="text-align:center; margin-top:12px;">du gjettet</div>
   <div class="score-big" id="hsd-score-big">0 <span class="av-sub">av</span> 0</div>
   <div class="score-hand" id="hsd-score-hand">detektivarbeid!</div>
+  <div class="sub" id="hsd-round-meta">Runde 1 av 5 · Totalpoeng: 0</div>
   <div id="hsd-reveal-list" style="margin-top:12px; display:flex; flex-direction:column; gap:24px;"></div>
   <div id="hsd-host-result-btn" style="display:none; margin-top:12px;">
     <button class="btn-primary" onclick="nextRound()">Neste runde →</button>
@@ -941,6 +1013,19 @@
   <div id="hsd-guest-result-msg" style="display:none; margin-top:12px;">
     <p class="sub">Venter på verten…</p>
   </div>
+</div>
+
+<!-- LEADERBOARD — HVEM -->
+<div id="screen-hsd-leaderboard" class="screen">
+  <div class="top-bar">
+    <div></div>
+    <div class="eyebrow">sluttresultat</div>
+    <div></div>
+  </div>
+  <h2 style="text-align:center; margin-top:4px;">Leaderboard</h2>
+  <p class="sub" id="hsd-leaderboard-sub">Etter 0 runder</p>
+  <div id="hsd-leaderboard-list" class="leaderboard-list"></div>
+  <button class="btn-primary" onclick="goToFrontPage()">Til forsiden</button>
 </div>
 
 <script>
@@ -958,6 +1043,9 @@
   let hsdAnswers = []; // [{ text }]
   let hsdVoteIdx = 0;
   let hsdMyVotes = [];
+  let hsdSelectedRounds = 5;
+  let hsdCurrentRound = 0;
+  let hsdTotalRounds = 0;
 
   const AVATAR_COLORS = ['#FF5500','#00E5C3','#9B5DE5','#F15BB5','#FEE440','#00BBF9','#FF9F1C','#2EC4B6'];
   const PAPER_COLORS  = ['#c48a8a','#7a8a6a','#d4a24a','#c66a4a','#6b7a8a','#8a6b7a','#a88a5a','#9a7a8a'];
@@ -1043,6 +1131,25 @@
   function startGame() { socket.emit('start_game'); }
   function wordSaid() { socket.emit('word_said'); }
   function nextRound() { socket.emit('next_round'); }
+  function setHsdRounds(rounds) {
+    hsdSelectedRounds = rounds;
+    updateRoundPickerUI();
+    socket.emit('set_rounds', { rounds });
+  }
+  function updateRoundPickerUI() {
+    const chips = document.querySelectorAll('#hsd-round-picker .round-chip');
+    chips.forEach((chip) => {
+      const value = Number(chip.textContent.trim());
+      chip.classList.toggle('active', value === hsdSelectedRounds);
+    });
+    const guestText = document.getElementById('hsd-rounds-guest');
+    if (guestText) guestText.textContent = 'Runder: ' + hsdSelectedRounds;
+    const hint = document.getElementById('hsd-start-hint');
+    if (hint) hint.textContent = 'Spilles over ' + hsdSelectedRounds + ' runder · Trenger minst 3 spillere';
+  }
+  function goToFrontPage() {
+    window.location.href = window.location.origin;
+  }
   function submitGuess() {
     const guess = document.getElementById('guess-input').value.trim();
     if (!guess) return;
@@ -1153,7 +1260,10 @@
     // tolerate old shape (array) too
     const players = Array.isArray(data) ? data : data.players;
     const gameType = Array.isArray(data) ? currentGame : data.gameType;
+    const selectedRounds = Array.isArray(data) ? null : data.selectedRounds;
     if (gameType === 'hvem-sendte-det') {
+      if (selectedRounds) hsdSelectedRounds = selectedRounds;
+      updateRoundPickerUI();
       renderHsdPlayers(players, 'hsd-lobby-grid-host', 'hsd-player-count-host');
       renderHsdPlayers(players, 'hsd-lobby-grid-guest', 'hsd-player-count-guest');
       const startBtn = document.getElementById('hsd-start-btn');
@@ -1204,7 +1314,9 @@
   });
 
   // ── Hvem sendte det? ──
-  socket.on('hsd_round_start', ({ question, total }) => {
+  socket.on('hsd_round_start', ({ question, total, roundNumber, totalRounds }) => {
+    hsdCurrentRound = roundNumber || hsdCurrentRound || 1;
+    hsdTotalRounds = totalRounds || hsdTotalRounds || hsdSelectedRounds;
     document.getElementById('hsd-question-text').innerHTML = escapeHtml(question);
     const input = document.getElementById('hsd-answer-input');
     input.value = '';
@@ -1213,12 +1325,12 @@
     document.getElementById('hsd-submit-answer-btn').disabled = true;
     document.getElementById('hsd-submit-answer-btn').style.display = 'block';
     document.getElementById('hsd-answer-waiting').style.display = 'none';
-    document.getElementById('hsd-answer-progress').textContent = '0/' + total + ' svart';
+    document.getElementById('hsd-answer-progress').textContent = 'Runde ' + hsdCurrentRound + '/' + hsdTotalRounds + ' · 0/' + total + ' svart';
     showScreen('screen-hsd-answering');
   });
 
   socket.on('hsd_answer_count', ({ count, total }) => {
-    document.getElementById('hsd-answer-progress').textContent = count + '/' + total + ' svart';
+    document.getElementById('hsd-answer-progress').textContent = 'Runde ' + hsdCurrentRound + '/' + hsdTotalRounds + ' · ' + count + '/' + total + ' svart';
   });
 
   socket.on('hsd_voting_start', ({ answers, players }) => {
@@ -1234,12 +1346,14 @@
 
   socket.on('hsd_vote_count', () => { /* could show progress if needed */ });
 
-  socket.on('hsd_reveal', ({ answers, players, myCorrect, total, isHost: hostId }) => {
+  socket.on('hsd_reveal', ({ answers, players, myCorrect, total, myTotalScore, roundNumber, totalRounds, isHost: hostId }) => {
     document.getElementById('hsd-score-big').innerHTML = myCorrect + ' <span class="av-sub">av</span> ' + total;
     const hand = document.getElementById('hsd-score-hand');
     if (myCorrect === total) hand.textContent = 'detektivarbeid!';
     else if (myCorrect >= Math.ceil(total / 2)) hand.textContent = 'ikke verst…';
     else hand.textContent = 'kjente du dem i det hele tatt?';
+    document.getElementById('hsd-round-meta').textContent =
+      'Runde ' + roundNumber + ' av ' + totalRounds + ' · Totalpoeng: ' + myTotalScore;
 
     const list = document.getElementById('hsd-reveal-list');
     list.innerHTML = '';
@@ -1279,8 +1393,30 @@
     const amHost = socket.id === hostId;
     document.getElementById('hsd-host-result-btn').style.display = amHost ? 'block' : 'none';
     document.getElementById('hsd-guest-result-msg').style.display = amHost ? 'none' : 'block';
+    if (amHost) {
+      const btn = document.querySelector('#hsd-host-result-btn button');
+      btn.textContent = roundNumber >= totalRounds ? 'Se leaderboard →' : 'Neste runde →';
+    }
 
     showScreen('screen-hsd-reveal');
+  });
+
+  socket.on('hsd_game_over', ({ leaderboard, totalRounds }) => {
+    const list = document.getElementById('hsd-leaderboard-list');
+    list.innerHTML = '';
+    document.getElementById('hsd-leaderboard-sub').textContent = 'Etter ' + totalRounds + ' runder';
+
+    leaderboard.forEach((entry, i) => {
+      const row = document.createElement('div');
+      row.className = 'leader-row' + (i === 0 ? ' top-1' : '');
+      row.innerHTML =
+        '<div class="leader-rank">#' + (i + 1) + '</div>' +
+        '<div class="leader-name">' + escapeHtml(entry.name) + '</div>' +
+        '<div class="leader-score">' + entry.score + ' riktige</div>';
+      list.appendChild(row);
+    });
+
+    showScreen('screen-hsd-leaderboard');
   });
 
   // ── HSD: input handlers ──
@@ -1367,6 +1503,7 @@
       // Skip picker — go straight to join. Game type is set when server responds.
       showJoin();
     }
+    updateRoundPickerUI();
   });
 </script>
 </body>

@@ -102,12 +102,15 @@ function startAnsweringRound(code) {
     answers: [],
     votes: {},
     shuffled: null,
+    roundNumber: room.hsdRoundNumber,
   };
   room.state = 'answering';
 
   io.to(code).emit('hsd_round_start', {
     question,
     total: room.players.length,
+    roundNumber: room.hsdRoundNumber,
+    totalRounds: room.selectedRounds,
   });
 }
 
@@ -142,6 +145,7 @@ function showHsdResults(code) {
     shuffled.forEach((ans, i) => {
       if (myVotes[i] === ans.playerIdx) correct++;
     });
+    room.hsdScores[p.id] = (room.hsdScores[p.id] || 0) + correct;
     io.to(p.id).emit('hsd_reveal', {
       answers: shuffled.map((a, i) => ({
         text: a.text,
@@ -152,8 +156,33 @@ function showHsdResults(code) {
       players: playersPayload,
       myCorrect: correct,
       total: shuffled.length,
+      myTotalScore: room.hsdScores[p.id] || 0,
+      roundNumber: room.hsdRoundNumber,
+      totalRounds: room.selectedRounds,
       isHost: room.host,
     });
+  });
+}
+
+function showHsdLeaderboard(code) {
+  const room = rooms[code];
+  if (!room) return;
+
+  room.state = 'game_over';
+
+  const leaderboard = room.players
+    .map((p) => ({
+      name: p.name,
+      score: room.hsdScores[p.id] || 0,
+    }))
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.name.localeCompare(b.name, 'no');
+    });
+
+  io.to(code).emit('hsd_game_over', {
+    leaderboard,
+    totalRounds: room.selectedRounds,
   });
 }
 
@@ -161,18 +190,26 @@ io.on('connection', (socket) => {
 
   socket.on('create_room', ({ name, gameType }) => {
     const code = generateCode();
+    const selectedGameType = gameType === 'hvem-sendte-det' ? 'hvem-sendte-det' : 'hotseat';
     rooms[code] = {
       host: socket.id,
       players: [{ id: socket.id, name }],
       state: 'lobby',
       currentRound: null,
       lastHotSeat: null,
-      gameType: gameType === 'hvem-sendte-det' ? 'hvem-sendte-det' : 'hotseat',
+      gameType: selectedGameType,
+      selectedRounds: selectedGameType === 'hvem-sendte-det' ? 5 : null,
+      hsdRoundNumber: 0,
+      hsdScores: { [socket.id]: 0 },
     };
     socket.join(code);
     socket.roomCode = code;
     socket.emit('room_created', { code, gameType: rooms[code].gameType });
-    io.to(code).emit('lobby_update', { players: rooms[code].players, gameType: rooms[code].gameType });
+    io.to(code).emit('lobby_update', {
+      players: rooms[code].players,
+      gameType: rooms[code].gameType,
+      selectedRounds: rooms[code].selectedRounds,
+    });
   });
 
   socket.on('join_room', ({ code, name }) => {
@@ -184,10 +221,32 @@ io.on('connection', (socket) => {
     }
     const upper = code.toUpperCase();
     room.players.push({ id: socket.id, name });
+    room.hsdScores[socket.id] = room.hsdScores[socket.id] || 0;
     socket.join(upper);
     socket.roomCode = upper;
     socket.emit('joined', { code: upper, isHost: false, name, gameType: room.gameType });
-    io.to(upper).emit('lobby_update', { players: room.players, gameType: room.gameType });
+    io.to(upper).emit('lobby_update', {
+      players: room.players,
+      gameType: room.gameType,
+      selectedRounds: room.selectedRounds,
+    });
+  });
+
+  socket.on('set_rounds', ({ rounds }) => {
+    const code = socket.roomCode;
+    const room = rooms[code];
+    if (!room || room.host !== socket.id) return;
+    if (room.gameType !== 'hvem-sendte-det' || room.state !== 'lobby') return;
+
+    const value = Number(rounds);
+    if (!Number.isInteger(value)) return;
+    room.selectedRounds = Math.max(1, Math.min(20, value));
+
+    io.to(code).emit('lobby_update', {
+      players: room.players,
+      gameType: room.gameType,
+      selectedRounds: room.selectedRounds,
+    });
   });
 
   socket.on('start_game', () => {
@@ -199,6 +258,11 @@ io.on('connection', (socket) => {
       return socket.emit('game_error', `Trenger minst ${min} spillere`);
     }
     if (room.gameType === 'hvem-sendte-det') {
+      room.hsdRoundNumber = 1;
+      room.hsdScores = {};
+      room.players.forEach((p) => {
+        room.hsdScores[p.id] = 0;
+      });
       startAnsweringRound(code);
     } else {
       startHotSeatRound(code);
@@ -210,6 +274,11 @@ io.on('connection', (socket) => {
     const room = rooms[code];
     if (!room || room.host !== socket.id) return;
     if (room.gameType === 'hvem-sendte-det') {
+      if (room.hsdRoundNumber >= room.selectedRounds) {
+        showHsdLeaderboard(code);
+        return;
+      }
+      room.hsdRoundNumber += 1;
       startAnsweringRound(code);
     } else {
       startHotSeatRound(code);
@@ -296,11 +365,16 @@ io.on('connection', (socket) => {
     if (!code || !rooms[code]) return;
     const room = rooms[code];
     room.players = room.players.filter(p => p.id !== socket.id);
+    delete room.hsdScores[socket.id];
     if (room.players.length === 0) {
       delete rooms[code];
     } else {
       if (room.host === socket.id) room.host = room.players[0].id;
-      io.to(code).emit('lobby_update', { players: room.players, gameType: room.gameType });
+      io.to(code).emit('lobby_update', {
+        players: room.players,
+        gameType: room.gameType,
+        selectedRounds: room.selectedRounds,
+      });
       io.to(code).emit('player_left', socket.id);
     }
   });
