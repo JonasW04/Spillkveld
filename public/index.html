@@ -704,7 +704,7 @@
   <input id="create-name" type="text" placeholder="Ditt navn" maxlength="20" autocomplete="off">
   <div id="create-error" class="error-msg"></div>
   <button class="btn-primary" onclick="createRoom()">Opprett</button>
-  <button class="btn-ghost" onclick="showScreen('screen-home')">← Tilbake</button>
+  <button class="btn-ghost" onclick="showScreen('screen-start')">← Tilbake</button>
 </div>
 
 <!-- JOIN -->
@@ -949,6 +949,8 @@
   let myCode = '';
   let isHost = false;
   let currentWordCount = 0;
+  let selectedGame = null;
+  let currentGame = null;
 
   // Which game we're playing / picked
   let currentGame = null; // 'hotseat' | 'hvem-sendte-det'
@@ -965,6 +967,49 @@
   function colorFor(i) {
     const set = currentGame === 'hvem-sendte-det' ? PAPER_COLORS : AVATAR_COLORS;
     return set[i % set.length];
+  }
+
+  // Add new games here — set enabled: true when ready to launch.
+  const GAMES = [
+    {
+      id: 'hotseat',
+      name: 'Hot Seat',
+      emoji: '🔥',
+      tagline: 'Gjett kategorien ut fra hintene — ett ord om gangen.',
+      enabled: true,
+    },
+  ];
+
+  function getGame(id) { return GAMES.find(g => g.id === id); }
+
+  function renderGameGrid() {
+    const grid = document.getElementById('game-grid');
+    grid.innerHTML = '';
+    GAMES.forEach(game => {
+      const card = document.createElement('div');
+      card.className = 'game-card ' + (game.enabled ? 'enabled' : 'disabled');
+      card.innerHTML = `
+        <div class="icon">${game.emoji}</div>
+        <div class="info">
+          <div class="title">${game.name}</div>
+          <div class="tagline">${game.tagline}</div>
+        </div>
+        ${game.enabled ? '' : '<div class="badge">Snart</div>'}
+      `;
+      if (game.enabled) {
+        card.onclick = () => selectGame(game.id);
+      }
+      grid.appendChild(card);
+    });
+  }
+
+  function selectGame(gameId) {
+    const game = getGame(gameId);
+    if (!game || !game.enabled) return;
+    selectedGame = gameId;
+    document.getElementById('create-emoji').textContent = game.emoji;
+    document.getElementById('create-title').textContent = `Lag ${game.name}-rom`;
+    showScreen('screen-create');
   }
 
   function showScreen(id) {
@@ -1362,6 +1407,7 @@
 
   // ── Direct URL with code ──
   window.addEventListener('load', () => {
+    renderGameGrid();
     const params = new URLSearchParams(window.location.search);
     if (params.get('code')) {
       // Skip picker — go straight to join. Game type is set when server responds.
