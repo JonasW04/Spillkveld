@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Hot Seat 🔥</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    :root {
+      --bg: #0c0b10;
+      --bg2: #161420;
+      --orange: #FF5500;
+      --teal: #00E5C3;
+      --white: #F4EFE8;
+      --muted: #6b6478;
+      --card: #1e1b28;
+      --border: #2d2840;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      background: var(--bg);
+      color: var(--white);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow-x: hidden;
+    }
+
+    .screen { display: none; width: 100%; max-width: 420px; animation: fadeUp 0.35s ease; }
+    .screen.active { display: flex; flex-direction: column; gap: 16px; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    h1.logo {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(64px, 20vw, 96px);
+      line-height: 0.9;
+      letter-spacing: 2px;
+      background: linear-gradient(135deg, var(--orange), #ff8c00);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-align: center;
+    }
+
+    .emoji-big { font-size: 48px; text-align: center; }
+
+    h2 {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 32px;
+      letter-spacing: 1px;
+      text-align: center;
+    }
+
+    p.sub {
+      color: var(--muted);
+      text-align: center;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    input {
+      background: var(--card);
+      border: 1.5px solid var(--border);
+      border-radius: 14px;
+      color: var(--white);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 17px;
+      font-weight: 500;
+      padding: 16px 18px;
+      width: 100%;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus { border-color: var(--orange); }
+    input::placeholder { color: var(--muted); }
+    input.uppercase { text-transform: uppercase; letter-spacing: 4px; }
+
+    button {
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      padding: 16px 20px;
+      transition: transform 0.1s, opacity 0.2s;
+      width: 100%;
+      letter-spacing: 0.3px;
+    }
+    button:active { transform: scale(0.97); }
+
+    .btn-primary {
+      background: var(--orange);
+      color: #fff;
+    }
+    .btn-secondary {
+      background: var(--card);
+      color: var(--white);
+      border: 1.5px solid var(--border);
+    }
+    .btn-teal {
+      background: var(--teal);
+      color: #0c0b10;
+    }
+    .btn-ghost {
+      background: transparent;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* Room code display */
+    .room-code-box {
+      background: var(--card);
+      border: 1.5px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      text-align: center;
+    }
+    .room-code-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
+    .room-code-val {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 64px;
+      letter-spacing: 8px;
+      color: var(--teal);
+      line-height: 1;
+    }
+    .room-code-url { color: var(--muted); font-size: 13px; margin-top: 8px; word-break: break-all; }
+
+    /* QR code */
+    #qr-container { display: flex; justify-content: center; margin-top: 8px; }
+    #qr-container canvas, #qr-container img { border-radius: 12px; }
+
+    /* Player list */
+    .player-list { display: flex; flex-direction: column; gap: 8px; }
+    .player-chip {
+      background: var(--card);
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 500;
+      animation: fadeUp 0.25s ease;
+    }
+    .player-chip .avatar {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .player-chip .host-badge {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--orange);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .avatar-colors {
+      0: '#FF5500', 1: '#00E5C3', 2: '#9B5DE5', 3: '#F15BB5',
+      4: '#FEE440', 5: '#00BBF9'
+    }
+
+    /* Category card */
+    .category-card {
+      background: linear-gradient(135deg, #1e1b28, #241f33);
+      border: 1.5px solid var(--border);
+      border-radius: 20px;
+      padding: 32px 24px;
+      text-align: center;
+    }
+    .category-label {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      margin-bottom: 12px;
+    }
+    .category-text {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(36px, 10vw, 52px);
+      line-height: 1.1;
+      color: var(--teal);
+    }
+
+    /* Hot seat warning */
+    .hot-seat-card {
+      background: linear-gradient(135deg, #2a0d00, #1f0900);
+      border: 1.5px solid #ff5500aa;
+      border-radius: 20px;
+      padding: 32px 24px;
+      text-align: center;
+    }
+    .hot-seat-card h2 {
+      color: var(--orange);
+      font-size: 40px;
+      margin-top: 8px;
+    }
+    .hot-seat-card p { color: #ffaa7799; font-size: 15px; margin-top: 8px; }
+
+    /* Word counter */
+    .word-counter {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 20px;
+      text-align: center;
+      border: 1.5px solid var(--border);
+    }
+    .word-count-num {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 72px;
+      line-height: 1;
+      color: var(--orange);
+    }
+    .word-count-label { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+    /* Round result */
+    .result-card {
+      border-radius: 20px;
+      padding: 28px 24px;
+      text-align: center;
+    }
+    .result-card.correct {
+      background: linear-gradient(135deg, #001e18, #002d22);
+      border: 1.5px solid #00E5C366;
+    }
+    .result-card.wrong {
+      background: linear-gradient(135deg, #1a0000, #2a0500);
+      border: 1.5px solid #FF550066;
+    }
+    .result-emoji { font-size: 56px; margin-bottom: 12px; }
+    .result-card h2 { font-size: 36px; }
+    .result-card.correct h2 { color: var(--teal); }
+    .result-card.wrong h2 { color: var(--orange); }
+    .result-sub { color: var(--muted); font-size: 14px; margin-top: 8px; }
+    .result-category {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 44px;
+      margin-top: 16px;
+      line-height: 1.1;
+    }
+
+    .error-msg {
+      background: #2a0d00;
+      border: 1px solid #ff5500aa;
+      border-radius: 12px;
+      color: var(--orange);
+      font-size: 14px;
+      padding: 12px 16px;
+      text-align: center;
+      display: none;
+    }
+    .error-msg.show { display: block; }
+
+    /* Pulse animation for hot seat */
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    .pulse { animation: pulse 2s ease-in-out infinite; }
+
+    /* Bounce */
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+
+    .waiting-dots span {
+      display: inline-block;
+      animation: bounce 1.2s ease-in-out infinite;
+    }
+    .waiting-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .waiting-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    .info-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 14px;
+      background: var(--card);
+      border-radius: 12px;
+      padding: 12px 16px;
+    }
+    .info-row .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--teal);
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+<!-- HOME -->
+<div id="screen-home" class="screen active">
+  <h1 class="logo">HOT<br>SEAT</h1>
+  <p class="sub">Gjett kategorien mens de andre gir deg hint — ett ord om gangen.</p>
+  <button class="btn-primary" onclick="showCreate()">Lag rom</button>
+  <div class="divider">eller</div>
+  <button class="btn-secondary" onclick="showJoin()">Bli med i rom</button>
+</div>
+
+<!-- CREATE -->
+<div id="screen-create" class="screen">
+  <div class="emoji-big">👑</div>
+  <h2>Lag rom</h2>
+  <input id="create-name" type="text" placeholder="Ditt navn" maxlength="20" autocomplete="off">
+  <div id="create-error" class="error-msg"></div>
+  <button class="btn-primary" onclick="createRoom()">Opprett</button>
+  <button class="btn-ghost" onclick="showScreen('screen-home')">← Tilbake</button>
+</div>
+
+<!-- JOIN -->
+<div id="screen-join" class="screen">
+  <div class="emoji-big">📱</div>
+  <h2>Bli med</h2>
+  <input id="join-code" type="text" placeholder="KODE" maxlength="4" class="uppercase" autocomplete="off">
+  <input id="join-name" type="text" placeholder="Ditt navn" maxlength="20" autocomplete="off">
+  <div id="join-error" class="error-msg"></div>
+  <button class="btn-primary" onclick="joinRoom()">Join</button>
+  <button class="btn-ghost" onclick="showScreen('screen-home')">← Tilbake</button>
+</div>
+
+<!-- LOBBY (HOST) -->
+<div id="screen-lobby-host" class="screen">
+  <div class="room-code-box">
+    <div class="room-code-label">Romkode</div>
+    <div class="room-code-val" id="display-code">----</div>
+    <div class="room-code-url" id="display-url"></div>
+  </div>
+  <div id="qr-container"></div>
+  <h2>Spillere <span id="player-count" style="color:var(--teal)">0</span></h2>
+  <div id="lobby-player-list" class="player-list"></div>
+  <button class="btn-primary" id="start-btn" onclick="startGame()" disabled>Start spillet</button>
+  <p class="sub" style="font-size:13px">Trenger minst 2 spillere</p>
+</div>
+
+<!-- LOBBY (GUEST) -->
+<div id="screen-lobby-guest" class="screen">
+  <div class="info-row">
+    <div class="dot"></div>
+    <span>Venter på at verten starter spillet</span>
+    <span class="waiting-dots" style="margin-left:auto"><span>•</span><span>•</span><span>•</span></span>
+  </div>
+  <div class="room-code-box">
+    <div class="room-code-label">Romkode</div>
+    <div class="room-code-val" id="guest-display-code">----</div>
+  </div>
+  <h2>Spillere <span id="guest-player-count" style="color:var(--teal)">0</span></h2>
+  <div id="guest-player-list" class="player-list"></div>
+</div>
+
+<!-- PLAYING: HOT SEAT -->
+<div id="screen-hotseat" class="screen">
+  <div class="hot-seat-card">
+    <div class="pulse" style="font-size:48px">🔥</div>
+    <h2>DU ER I HOT SEAT</h2>
+    <p>Gjett hva kategorien er ut fra hintene</p>
+  </div>
+  <div class="word-counter">
+    <div class="word-count-num" id="word-count-display">0</div>
+    <div class="word-count-label">ord sagt så langt</div>
+  </div>
+  <p class="sub">De andre sier ord én om gangen.<br>Gjett når du tror du vet det!</p>
+  <input id="guess-input" type="text" placeholder="Din gjetning..." autocomplete="off">
+  <button class="btn-orange btn-primary" onclick="submitGuess()">Gjett! 🎯</button>
+</div>
+
+<!-- PLAYING: CLUE GIVER -->
+<div id="screen-clue" class="screen">
+  <div class="category-card">
+    <div class="category-label">Kategorien er</div>
+    <div class="category-text" id="clue-category-text">---</div>
+  </div>
+  <div class="info-row">
+    <div class="dot" style="background:var(--orange)"></div>
+    <span id="hotseat-name-display">??? er i hot seat</span>
+  </div>
+  <div class="word-counter">
+    <div class="word-count-num" id="clue-word-count">0</div>
+    <div class="word-count-label">ord sagt av laget</div>
+  </div>
+  <p class="sub">Si ett ord som hører til kategorien,<br>trykk knappen etter du har sagt det.</p>
+  <button class="btn-teal" onclick="wordSaid()">✓ Jeg sa et ord</button>
+</div>
+
+<!-- ROUND END -->
+<div id="screen-result" class="screen">
+  <div id="result-card" class="result-card">
+    <div class="result-emoji" id="result-emoji">🎉</div>
+    <h2 id="result-title">Riktig!</h2>
+    <p class="result-sub" id="result-sub"></p>
+    <div class="result-category" id="result-category"></div>
+  </div>
+  <div id="host-result-btn" style="display:none">
+    <button class="btn-primary" onclick="nextRound()">Neste runde →</button>
+  </div>
+  <div id="guest-result-msg" style="display:none">
+    <p class="sub">Venter på verten...</p>
+  </div>
+</div>
+
+<script>
+  const socket = io();
+  let myName = '';
+  let myCode = '';
+  let isHost = false;
+  let currentWordCount = 0;
+
+  const AVATAR_COLORS = ['#FF5500','#00E5C3','#9B5DE5','#F15BB5','#FEE440','#00BBF9','#FF9F1C','#2EC4B6'];
+
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  function showCreate() { showScreen('screen-create'); }
+  function showJoin() {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (code) document.getElementById('join-code').value = code;
+    showScreen('screen-join');
+  }
+
+  function createRoom() {
+    const name = document.getElementById('create-name').value.trim();
+    if (!name) return showError('create-error', 'Skriv inn navnet ditt');
+    myName = name;
+    isHost = true;
+    socket.emit('create_room', { name });
+  }
+
+  function joinRoom() {
+    const code = document.getElementById('join-code').value.trim().toUpperCase();
+    const name = document.getElementById('join-name').value.trim();
+    if (!code || code.length !== 4) return showError('join-error', 'Skriv inn 4-tegns koden');
+    if (!name) return showError('join-error', 'Skriv inn navnet ditt');
+    myName = name;
+    socket.emit('join_room', { code, name });
+  }
+
+  function startGame() { socket.emit('start_game'); }
+  function wordSaid() { socket.emit('word_said'); }
+  function nextRound() { socket.emit('next_round'); }
+
+  function submitGuess() {
+    const guess = document.getElementById('guess-input').value.trim();
+    if (!guess) return;
+    socket.emit('make_guess', { guess });
+  }
+
+  function showError(id, msg) {
+    const el = document.getElementById(id);
+    el.textContent = msg;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 3000);
+  }
+
+  function renderPlayers(players, listId, countId, hostId) {
+    const list = document.getElementById(listId);
+    const count = document.getElementById(countId);
+    count.textContent = players.length;
+    list.innerHTML = '';
+    players.forEach((p, i) => {
+      const div = document.createElement('div');
+      div.className = 'player-chip';
+      const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
+      div.innerHTML = `
+        <div class="avatar" style="background:${color}22;color:${color}">${p.name[0].toUpperCase()}</div>
+        <span>${p.name}</span>
+        ${p.name === myName ? '<span style="color:var(--teal);font-size:12px;margin-left:auto">deg</span>' : ''}
+      `;
+      list.appendChild(div);
+    });
+  }
+
+  // Socket events
+  socket.on('room_created', ({ code }) => {
+    myCode = code;
+    document.getElementById('display-code').textContent = code;
+    const url = `${window.location.origin}?code=${code}`;
+    document.getElementById('display-url').textContent = url;
+    // QR code
+    const qr = document.getElementById('qr-container');
+    qr.innerHTML = '';
+    new QRCode(qr, { text: url, width: 160, height: 160, colorDark: '#F4EFE8', colorLight: '#1e1b28' });
+    showScreen('screen-lobby-host');
+  });
+
+  socket.on('joined', ({ code }) => {
+    myCode = code;
+    document.getElementById('guest-display-code').textContent = code;
+    showScreen('screen-lobby-guest');
+  });
+
+  socket.on('join_error', (msg) => showError('join-error', msg));
+  socket.on('game_error', (msg) => alert(msg));
+
+  socket.on('lobby_update', (players) => {
+    renderPlayers(players, 'lobby-player-list', 'player-count');
+    renderPlayers(players, 'guest-player-list', 'guest-player-count');
+    const startBtn = document.getElementById('start-btn');
+    startBtn.disabled = players.length < 2;
+    startBtn.textContent = players.length < 2 ? 'Trenger minst 2 spillere' : `Start spillet (${players.length} spillere) →`;
+  });
+
+  socket.on('round_start', ({ isHotSeat, category, hotSeatName }) => {
+    currentWordCount = 0;
+    if (isHotSeat) {
+      document.getElementById('word-count-display').textContent = '0';
+      document.getElementById('guess-input').value = '';
+      showScreen('screen-hotseat');
+    } else {
+      document.getElementById('clue-category-text').textContent = category;
+      document.getElementById('hotseat-name-display').textContent = `${hotSeatName} er i hot seat 🔥`;
+      document.getElementById('clue-word-count').textContent = '0';
+      showScreen('screen-clue');
+    }
+  });
+
+  socket.on('word_count', (count) => {
+    document.getElementById('word-count-display').textContent = count;
+    document.getElementById('clue-word-count').textContent = count;
+  });
+
+  socket.on('round_end', ({ correct, category, hotSeatName, guess, isHost: hostId }) => {
+    const card = document.getElementById('result-card');
+    card.className = 'result-card ' + (correct ? 'correct' : 'wrong');
+    document.getElementById('result-emoji').textContent = correct ? '🎉' : '💀';
+    document.getElementById('result-title').textContent = correct ? 'Riktig!' : 'Feil!';
+    document.getElementById('result-sub').textContent = correct
+      ? `${hotSeatName} gjettet riktig: "${guess}"`
+      : `${hotSeatName} gjettet "${guess}"`;
+    document.getElementById('result-category').textContent = category;
+
+    const amHost = socket.id === hostId;
+    document.getElementById('host-result-btn').style.display = amHost ? 'block' : 'none';
+    document.getElementById('guest-result-msg').style.display = amHost ? 'none' : 'block';
+    showScreen('screen-result');
+  });
+
+  // Handle direct URL with code
+  window.addEventListener('load', () => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('code')) showJoin();
+  });
+</script>
+</body>
+</html>
