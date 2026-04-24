@@ -70,7 +70,7 @@ function startRound(code) {
 
 io.on('connection', (socket) => {
 
-  socket.on('create_room', ({ name }) => {
+  socket.on('create_room', ({ name, game }) => {
     const code = generateCode();
     rooms[code] = {
       host: socket.id,
@@ -78,10 +78,11 @@ io.on('connection', (socket) => {
       state: 'lobby',
       currentRound: null,
       lastHotSeat: null,
+      game: game || 'hotseat',
     };
     socket.join(code);
     socket.roomCode = code;
-    socket.emit('room_created', { code });
+    socket.emit('room_created', { code, game: rooms[code].game });
     io.to(code).emit('lobby_update', rooms[code].players);
   });
 
@@ -95,7 +96,7 @@ io.on('connection', (socket) => {
     room.players.push({ id: socket.id, name });
     socket.join(code.toUpperCase());
     socket.roomCode = code.toUpperCase();
-    socket.emit('joined', { code: code.toUpperCase(), isHost: false, name });
+    socket.emit('joined', { code: code.toUpperCase(), isHost: false, name, game: room.game });
     io.to(code.toUpperCase()).emit('lobby_update', room.players);
   });
 

@@ -322,27 +322,77 @@
       background: var(--teal);
       flex-shrink: 0;
     }
+
+    /* Game selection grid */
+    .game-grid { display: flex; flex-direction: column; gap: 12px; }
+    .game-card {
+      background: var(--card);
+      border: 1.5px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      cursor: pointer;
+      transition: transform 0.1s, border-color 0.2s;
+      text-align: left;
+    }
+    .game-card:active { transform: scale(0.98); }
+    .game-card.enabled:hover { border-color: var(--orange); }
+    .game-card.disabled { opacity: 0.45; cursor: not-allowed; }
+    .game-card .icon {
+      font-size: 40px;
+      width: 56px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .game-card .info { flex: 1; min-width: 0; }
+    .game-card .title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28px;
+      letter-spacing: 1px;
+      line-height: 1;
+    }
+    .game-card .tagline {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 6px;
+      line-height: 1.3;
+    }
+    .game-card .badge {
+      background: var(--bg2);
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
 
-<!-- HOME -->
-<div id="screen-home" class="screen active">
-  <h1 class="logo">HOT<br>SEAT</h1>
-  <p class="sub">Gjett kategorien mens de andre gir deg hint — ett ord om gangen.</p>
-  <button class="btn-primary" onclick="showCreate()">Lag rom</button>
-  <div class="divider">eller</div>
+<!-- START / GAME SELECT -->
+<div id="screen-start" class="screen active">
+  <div class="emoji-big">🎮</div>
+  <h2>Velg spill</h2>
+  <div id="game-grid" class="game-grid"></div>
+  <div class="divider">har du en kode?</div>
   <button class="btn-secondary" onclick="showJoin()">Bli med i rom</button>
 </div>
 
 <!-- CREATE -->
 <div id="screen-create" class="screen">
-  <div class="emoji-big">👑</div>
-  <h2>Lag rom</h2>
+  <div class="emoji-big" id="create-emoji">👑</div>
+  <h2 id="create-title">Lag rom</h2>
   <input id="create-name" type="text" placeholder="Ditt navn" maxlength="20" autocomplete="off">
   <div id="create-error" class="error-msg"></div>
   <button class="btn-primary" onclick="createRoom()">Opprett</button>
-  <button class="btn-ghost" onclick="showScreen('screen-home')">← Tilbake</button>
+  <button class="btn-ghost" onclick="showScreen('screen-start')">← Tilbake</button>
 </div>
 
 <!-- JOIN -->
@@ -353,7 +403,7 @@
   <input id="join-name" type="text" placeholder="Ditt navn" maxlength="20" autocomplete="off">
   <div id="join-error" class="error-msg"></div>
   <button class="btn-primary" onclick="joinRoom()">Join</button>
-  <button class="btn-ghost" onclick="showScreen('screen-home')">← Tilbake</button>
+  <button class="btn-ghost" onclick="showScreen('screen-start')">← Tilbake</button>
 </div>
 
 <!-- LOBBY (HOST) -->
@@ -441,15 +491,59 @@
   let myCode = '';
   let isHost = false;
   let currentWordCount = 0;
+  let selectedGame = null;
+  let currentGame = null;
 
   const AVATAR_COLORS = ['#FF5500','#00E5C3','#9B5DE5','#F15BB5','#FEE440','#00BBF9','#FF9F1C','#2EC4B6'];
+
+  // Add new games here — set enabled: true when ready to launch.
+  const GAMES = [
+    {
+      id: 'hotseat',
+      name: 'Hot Seat',
+      emoji: '🔥',
+      tagline: 'Gjett kategorien ut fra hintene — ett ord om gangen.',
+      enabled: true,
+    },
+  ];
+
+  function getGame(id) { return GAMES.find(g => g.id === id); }
+
+  function renderGameGrid() {
+    const grid = document.getElementById('game-grid');
+    grid.innerHTML = '';
+    GAMES.forEach(game => {
+      const card = document.createElement('div');
+      card.className = 'game-card ' + (game.enabled ? 'enabled' : 'disabled');
+      card.innerHTML = `
+        <div class="icon">${game.emoji}</div>
+        <div class="info">
+          <div class="title">${game.name}</div>
+          <div class="tagline">${game.tagline}</div>
+        </div>
+        ${game.enabled ? '' : '<div class="badge">Snart</div>'}
+      `;
+      if (game.enabled) {
+        card.onclick = () => selectGame(game.id);
+      }
+      grid.appendChild(card);
+    });
+  }
+
+  function selectGame(gameId) {
+    const game = getGame(gameId);
+    if (!game || !game.enabled) return;
+    selectedGame = gameId;
+    document.getElementById('create-emoji').textContent = game.emoji;
+    document.getElementById('create-title').textContent = `Lag ${game.name}-rom`;
+    showScreen('screen-create');
+  }
 
   function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
   }
 
-  function showCreate() { showScreen('screen-create'); }
   function showJoin() {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
@@ -460,9 +554,10 @@
   function createRoom() {
     const name = document.getElementById('create-name').value.trim();
     if (!name) return showError('create-error', 'Skriv inn navnet ditt');
+    if (!selectedGame) return showError('create-error', 'Velg et spill først');
     myName = name;
     isHost = true;
-    socket.emit('create_room', { name });
+    socket.emit('create_room', { name, game: selectedGame });
   }
 
   function joinRoom() {
@@ -510,8 +605,9 @@
   }
 
   // Socket events
-  socket.on('room_created', ({ code }) => {
+  socket.on('room_created', ({ code, game }) => {
     myCode = code;
+    currentGame = game;
     document.getElementById('display-code').textContent = code;
     const url = `${window.location.origin}?code=${code}`;
     document.getElementById('display-url').textContent = url;
@@ -522,8 +618,9 @@
     showScreen('screen-lobby-host');
   });
 
-  socket.on('joined', ({ code }) => {
+  socket.on('joined', ({ code, game }) => {
     myCode = code;
+    currentGame = game;
     document.getElementById('guest-display-code').textContent = code;
     showScreen('screen-lobby-guest');
   });
@@ -576,6 +673,7 @@
 
   // Handle direct URL with code
   window.addEventListener('load', () => {
+    renderGameGrid();
     const params = new URLSearchParams(window.location.search);
     if (params.get('code')) showJoin();
   });
