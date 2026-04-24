@@ -159,7 +159,7 @@ function showHsdResults(code) {
 
 io.on('connection', (socket) => {
 
-  socket.on('create_room', ({ name, gameType }) => {
+  socket.on('create_room', ({ name }) => {
     const code = generateCode();
     rooms[code] = {
       host: socket.id,
@@ -167,12 +167,11 @@ io.on('connection', (socket) => {
       state: 'lobby',
       currentRound: null,
       lastHotSeat: null,
-      gameType: gameType === 'hvem-sendte-det' ? 'hvem-sendte-det' : 'hotseat',
     };
     socket.join(code);
     socket.roomCode = code;
-    socket.emit('room_created', { code, gameType: rooms[code].gameType });
-    io.to(code).emit('lobby_update', { players: rooms[code].players, gameType: rooms[code].gameType });
+    socket.emit('room_created', { code });
+    io.to(code).emit('lobby_update', rooms[code].players);
   });
 
   socket.on('join_room', ({ code, name }) => {
@@ -184,10 +183,10 @@ io.on('connection', (socket) => {
     }
     const upper = code.toUpperCase();
     room.players.push({ id: socket.id, name });
-    socket.join(upper);
-    socket.roomCode = upper;
-    socket.emit('joined', { code: upper, isHost: false, name, gameType: room.gameType });
-    io.to(upper).emit('lobby_update', { players: room.players, gameType: room.gameType });
+    socket.join(code.toUpperCase());
+    socket.roomCode = code.toUpperCase();
+    socket.emit('joined', { code: code.toUpperCase(), isHost: false, name });
+    io.to(code.toUpperCase()).emit('lobby_update', room.players);
   });
 
   socket.on('start_game', () => {
