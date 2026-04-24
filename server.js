@@ -66,28 +66,102 @@ function getLocalIP() {
   return 'localhost';
 }
 
+function shuffled(arr) {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+function emitLobbyUpdate(code) {
+  const room = rooms[code];
+  if (!room) return;
+
+  if (room.gameType === 'hvem-sendte-det') {
+    io.to(code).emit('lobby_update', {
+      players: room.players,
+      gameType: room.gameType,
+      selectedRounds: room.selectedRounds,
+    });
+    return;
+  }
+
+  const hotSeatTotalRounds = room.players.length * room.hotSeatGuessesPerPlayer;
+  io.to(code).emit('lobby_update', {
+    players: room.players,
+    gameType: room.gameType,
+    hotSeatGuessesPerPlayer: room.hotSeatGuessesPerPlayer,
+    hotSeatTotalRounds,
+  });
+}
+
 // ───────── HOT SEAT ─────────
 function startHotSeatRound(code) {
   const room = rooms[code];
   if (!room) return;
 
-  let candidates = room.players.filter(p => p.name !== room.lastHotSeat);
-  if (candidates.length === 0) candidates = room.players;
-  const hotSeat = candidates[Math.floor(Math.random() * candidates.length)];
+  const totalRounds = room.hotSeatTotalRounds;
+  if (!totalRounds || room.hotSeatRoundNumber > totalRounds) return;
+
+  const hotSeatId = room.hotSeatOrder[room.hotSeatOrderIdx++];
+  if (!hotSeatId) {
+    showHotSeatLeaderboard(code);
+    return;
+  }
+  const hotSeat = room.players.find((p) => p.id === hotSeatId);
+  if (!hotSeat) {
+    startHotSeatRound(code);
+    return;
+  }
+
   room.lastHotSeat = hotSeat.name;
 
   const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
-  room.currentRound = { category, hotSeatId: hotSeat.id, hotSeatName: hotSeat.name, wordCount: 0 };
+  room.currentRound = {
+    category,
+    hotSeatId: hotSeat.id,
+    hotSeatName: hotSeat.name,
+    wordCount: 0,
+    roundNumber: room.hotSeatRoundNumber,
+  };
   room.state = 'playing';
 
-  room.players.forEach(p => {
+  room.players.forEach((p) => {
     const isHotSeat = p.id === hotSeat.id;
     io.to(p.id).emit('round_start', {
       isHotSeat,
       category: isHotSeat ? null : category,
       hotSeatName: hotSeat.name,
       playerCount: room.players.length,
+      roundNumber: room.hotSeatRoundNumber,
+      totalRounds,
+      canVerify: p.id === room.host,
+      hostId: room.host,
     });
+  });
+}
+
+function showHotSeatLeaderboard(code) {
+  const room = rooms[code];
+  if (!room) return;
+
+  room.state = 'game_over';
+
+  const leaderboard = room.players
+    .map((p) => ({
+      name: p.name,
+      score: room.hotSeatScores[p.id] || 0,
+    }))
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.name.localeCompare(b.name, 'no');
+    });
+
+  io.to(code).emit('hotseat_game_over', {
+    leaderboard,
+    totalRounds: room.hotSeatTotalRounds,
   });
 }
 
@@ -201,15 +275,17 @@ io.on('connection', (socket) => {
       selectedRounds: selectedGameType === 'hvem-sendte-det' ? 5 : null,
       hsdRoundNumber: 0,
       hsdScores: { [socket.id]: 0 },
+      hotSeatGuessesPerPlayer: 1,
+      hotSeatRoundNumber: 0,
+      hotSeatTotalRounds: 0,
+      hotSeatScores: { [socket.id]: 0 },
+      hotSeatOrder: [],
+      hotSeatOrderIdx: 0,
     };
     socket.join(code);
     socket.roomCode = code;
     socket.emit('room_created', { code, gameType: rooms[code].gameType });
-    io.to(code).emit('lobby_update', {
-      players: rooms[code].players,
-      gameType: rooms[code].gameType,
-      selectedRounds: rooms[code].selectedRounds,
-    });
+    emitLobbyUpdate(code);
   });
 
   socket.on('join_room', ({ code, name }) => {
@@ -222,14 +298,23 @@ io.on('connection', (socket) => {
     const upper = code.toUpperCase();
     room.players.push({ id: socket.id, name });
     room.hsdScores[socket.id] = room.hsdScores[socket.id] || 0;
+    room.hotSeatScores[socket.id] = room.hotSeatScores[socket.id] || 0;
     socket.join(upper);
     socket.roomCode = upper;
     socket.emit('joined', { code: upper, isHost: false, name, gameType: room.gameType });
-    io.to(upper).emit('lobby_update', {
-      players: room.players,
-      gameType: room.gameType,
-      selectedRounds: room.selectedRounds,
-    });
+    emitLobbyUpdate(upper);
+  });
+
+  socket.on('set_hotseat_rounds', ({ perPlayerRounds }) => {
+    const code = socket.roomCode;
+    const room = rooms[code];
+    if (!room || room.host !== socket.id) return;
+    if (room.gameType !== 'hotseat' || room.state !== 'lobby') return;
+
+    const value = Number(perPlayerRounds);
+    if (!Number.isInteger(value)) return;
+    room.hotSeatGuessesPerPlayer = Math.max(1, Math.min(6, value));
+    emitLobbyUpdate(code);
   });
 
   socket.on('set_rounds', ({ rounds }) => {
@@ -241,12 +326,7 @@ io.on('connection', (socket) => {
     const value = Number(rounds);
     if (!Number.isInteger(value)) return;
     room.selectedRounds = Math.max(1, Math.min(20, value));
-
-    io.to(code).emit('lobby_update', {
-      players: room.players,
-      gameType: room.gameType,
-      selectedRounds: room.selectedRounds,
-    });
+    emitLobbyUpdate(code);
   });
 
   socket.on('start_game', () => {
@@ -265,6 +345,18 @@ io.on('connection', (socket) => {
       });
       startAnsweringRound(code);
     } else {
+      room.hotSeatRoundNumber = 1;
+      room.hotSeatScores = {};
+      room.players.forEach((p) => {
+        room.hotSeatScores[p.id] = 0;
+      });
+
+      room.hotSeatOrder = shuffled(
+        room.players.flatMap((p) => Array.from({ length: room.hotSeatGuessesPerPlayer }, () => p.id))
+      );
+      room.hotSeatOrderIdx = 0;
+      room.hotSeatTotalRounds = room.hotSeatOrder.length;
+
       startHotSeatRound(code);
     }
   });
@@ -281,6 +373,11 @@ io.on('connection', (socket) => {
       room.hsdRoundNumber += 1;
       startAnsweringRound(code);
     } else {
+      if (room.hotSeatRoundNumber >= room.hotSeatTotalRounds) {
+        showHotSeatLeaderboard(code);
+        return;
+      }
+      room.hotSeatRoundNumber += 1;
       startHotSeatRound(code);
     }
   });
@@ -294,21 +391,25 @@ io.on('connection', (socket) => {
     io.to(code).emit('word_count', room.currentRound.wordCount);
   });
 
-  socket.on('make_guess', ({ guess }) => {
+  socket.on('hotseat_mark_correct', () => {
     const code = socket.roomCode;
     const room = rooms[code];
     if (!room || !room.currentRound || room.gameType !== 'hotseat') return;
-    if (socket.id !== room.currentRound.hotSeatId) return;
+    if (socket.id !== room.host) return;
 
-    const normalize = s => s.toLowerCase().trim().replace(/[^a-zæøå ]/gi, '');
-    const correct = normalize(guess) === normalize(room.currentRound.category);
+    const pointsAwarded = Math.max(1, 20 - room.currentRound.wordCount);
+    room.hotSeatScores[room.currentRound.hotSeatId] =
+      (room.hotSeatScores[room.currentRound.hotSeatId] || 0) + pointsAwarded;
     room.state = 'round_end';
 
     io.to(code).emit('round_end', {
-      correct,
       category: room.currentRound.category,
       hotSeatName: room.currentRound.hotSeatName,
-      guess,
+      wordCount: room.currentRound.wordCount,
+      pointsAwarded,
+      totalScore: room.hotSeatScores[room.currentRound.hotSeatId] || 0,
+      roundNumber: room.hotSeatRoundNumber,
+      totalRounds: room.hotSeatTotalRounds,
       isHost: room.host,
     });
   });
@@ -366,15 +467,14 @@ io.on('connection', (socket) => {
     const room = rooms[code];
     room.players = room.players.filter(p => p.id !== socket.id);
     delete room.hsdScores[socket.id];
+    delete room.hotSeatScores[socket.id];
+    room.hotSeatOrder = room.hotSeatOrder.filter((id) => id !== socket.id);
+    room.hotSeatTotalRounds = room.hotSeatOrder.length;
     if (room.players.length === 0) {
       delete rooms[code];
     } else {
       if (room.host === socket.id) room.host = room.players[0].id;
-      io.to(code).emit('lobby_update', {
-        players: room.players,
-        gameType: room.gameType,
-        selectedRounds: room.selectedRounds,
-      });
+      emitLobbyUpdate(code);
       io.to(code).emit('player_left', socket.id);
     }
   });

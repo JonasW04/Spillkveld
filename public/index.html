@@ -792,6 +792,14 @@
   <div id="qr-container"></div>
   <h2>Spillere <span id="player-count" style="color:var(--teal)">0</span></h2>
   <div id="lobby-player-list" class="player-list"></div>
+  <div class="eyebrow" style="margin-top:6px;">hvor mange ganger skal hver person gjette?</div>
+  <div class="round-picker" id="hotseat-round-picker">
+    <button class="round-chip active" onclick="setHotSeatRounds(1)">1</button>
+    <button class="round-chip" onclick="setHotSeatRounds(2)">2</button>
+    <button class="round-chip" onclick="setHotSeatRounds(3)">3</button>
+    <button class="round-chip" onclick="setHotSeatRounds(4)">4</button>
+    <button class="round-chip" onclick="setHotSeatRounds(5)">5</button>
+  </div>
   <button class="btn-primary" id="start-btn" onclick="startGame()" disabled>Start spillet</button>
   <p class="sub" style="font-size:13px" id="start-min-hint">Trenger minst 2 spillere</p>
 </div>
@@ -809,6 +817,7 @@
   </div>
   <h2>Spillere <span id="guest-player-count" style="color:var(--teal)">0</span></h2>
   <div id="guest-player-list" class="player-list"></div>
+  <p class="sub" style="font-size:13px" id="hotseat-rounds-guest">1 runde per person (totalt 0 runder)</p>
 </div>
 
 <!-- PLAYING: HOT SEAT -->
@@ -822,9 +831,13 @@
     <div class="word-count-num" id="word-count-display">0</div>
     <div class="word-count-label">ord sagt så langt</div>
   </div>
-  <p class="sub">De andre sier ord én om gangen.<br>Gjett når du tror du vet det!</p>
-  <input id="guess-input" type="text" placeholder="Din gjetning..." autocomplete="off">
-  <button class="btn-primary" onclick="submitGuess()">Gjett! 🎯</button>
+  <p class="sub" id="hotseat-round-label">Runde 1/1</p>
+  <p class="sub">Si gjetningen høyt. Verten trykker når du er riktig.</p>
+  <div id="hotseat-host-verify-box" class="info-row" style="display:none;">
+    <div class="dot" style="background:var(--teal)"></div>
+    <span>Vert: bekreft når du har gjettet riktig</span>
+  </div>
+  <button id="hotseat-host-correct-btn" class="btn-primary" onclick="markHotSeatCorrect()" style="display:none;">✓ Jeg gjettet riktig</button>
 </div>
 
 <!-- PLAYING: CLUE GIVER -->
@@ -841,8 +854,14 @@
     <div class="word-count-num" id="clue-word-count">0</div>
     <div class="word-count-label">ord sagt av laget</div>
   </div>
+  <p class="sub" id="clue-round-label">Runde 1/1</p>
   <p class="sub">Si ett ord som hører til kategorien,<br>trykk knappen etter du har sagt det.</p>
   <button class="btn-teal" onclick="wordSaid()">✓ Jeg sa et ord</button>
+  <div id="host-verify-box" class="info-row" style="display:none; margin-top:8px;">
+    <div class="dot" style="background:var(--teal)"></div>
+    <span>Vert: bekreft når spilleren har gjettet riktig</span>
+  </div>
+  <button id="host-correct-btn" class="btn-primary" onclick="markHotSeatCorrect()" style="display:none;">✓ Spilleren gjettet riktig</button>
 </div>
 
 <!-- ROUND END: HOT SEAT -->
@@ -852,6 +871,7 @@
     <h2 id="result-title">Riktig!</h2>
     <p class="result-sub" id="result-sub"></p>
     <div class="result-category" id="result-category"></div>
+    <p class="result-sub" id="hotseat-score-meta"></p>
   </div>
   <div id="host-result-btn" style="display:none">
     <button class="btn-primary" onclick="nextRound()">Neste runde →</button>
@@ -859,6 +879,14 @@
   <div id="guest-result-msg" style="display:none">
     <p class="sub">Venter på verten...</p>
   </div>
+</div>
+
+<!-- LEADERBOARD — HOT SEAT -->
+<div id="screen-hotseat-leaderboard" class="screen">
+  <h2 style="text-align:center;">Hot Seat Leaderboard</h2>
+  <p class="sub" id="hotseat-leaderboard-sub">Etter 0 runder</p>
+  <div id="hotseat-leaderboard-list" class="leaderboard-list"></div>
+  <button class="btn-primary" onclick="goToFrontPage()">Til forsiden</button>
 </div>
 
 <!-- ================== HVEM SENDTE DET SCREENS ================== -->
@@ -1034,6 +1062,9 @@
   let myCode = '';
   let isHost = false;
   let currentWordCount = 0;
+  let hotSeatGuessesPerPlayer = 1;
+  let hotSeatTotalRounds = 0;
+  let hotSeatRoundNumber = 0;
 
   // Which game we're playing / picked
   let currentGame = null; // 'hotseat' | 'hvem-sendte-det'
@@ -1131,6 +1162,30 @@
   function startGame() { socket.emit('start_game'); }
   function wordSaid() { socket.emit('word_said'); }
   function nextRound() { socket.emit('next_round'); }
+  function markHotSeatCorrect() { socket.emit('hotseat_mark_correct'); }
+  function setHotSeatRounds(perPlayerRounds) {
+    hotSeatGuessesPerPlayer = perPlayerRounds;
+    updateHotSeatRoundPickerUI();
+    socket.emit('set_hotseat_rounds', { perPlayerRounds });
+  }
+  function updateHotSeatRoundPickerUI() {
+    const chips = document.querySelectorAll('#hotseat-round-picker .round-chip');
+    chips.forEach((chip) => {
+      const value = Number(chip.textContent.trim());
+      chip.classList.toggle('active', value === hotSeatGuessesPerPlayer);
+    });
+    const guestText = document.getElementById('hotseat-rounds-guest');
+    if (guestText) {
+      guestText.textContent = hotSeatGuessesPerPlayer + ' runde' + (hotSeatGuessesPerPlayer > 1 ? 'r' : '') +
+        ' per person (totalt ' + hotSeatTotalRounds + ' runder)';
+    }
+    const hint = document.getElementById('start-min-hint');
+    if (hint) {
+      hint.textContent =
+        hotSeatGuessesPerPlayer + ' runde' + (hotSeatGuessesPerPlayer > 1 ? 'r' : '') +
+        ' per person · totalt ' + hotSeatTotalRounds + ' runder';
+    }
+  }
   function setHsdRounds(rounds) {
     hsdSelectedRounds = rounds;
     updateRoundPickerUI();
@@ -1149,11 +1204,6 @@
   }
   function goToFrontPage() {
     window.location.href = window.location.origin;
-  }
-  function submitGuess() {
-    const guess = document.getElementById('guess-input').value.trim();
-    if (!guess) return;
-    socket.emit('make_guess', { guess });
   }
 
   function showError(id, msg) {
@@ -1270,6 +1320,9 @@
       startBtn.disabled = players.length < 3;
       startBtn.textContent = players.length < 3 ? 'Trenger minst 3 spillere' : 'Start spillet (' + players.length + ' spillere)';
     } else {
+      hotSeatGuessesPerPlayer = data.hotSeatGuessesPerPlayer || hotSeatGuessesPerPlayer;
+      hotSeatTotalRounds = data.hotSeatTotalRounds || (players.length * hotSeatGuessesPerPlayer);
+      updateHotSeatRoundPickerUI();
       renderHotSeatPlayers(players, 'lobby-player-list', 'player-count');
       renderHotSeatPlayers(players, 'guest-player-list', 'guest-player-count');
       const startBtn = document.getElementById('start-btn');
@@ -1279,16 +1332,23 @@
   });
 
   // ── Hot seat ──
-  socket.on('round_start', ({ isHotSeat, category, hotSeatName }) => {
+  socket.on('round_start', ({ isHotSeat, category, hotSeatName, roundNumber, totalRounds, canVerify }) => {
     currentWordCount = 0;
+    hotSeatRoundNumber = roundNumber || hotSeatRoundNumber;
+    hotSeatTotalRounds = totalRounds || hotSeatTotalRounds;
     if (isHotSeat) {
       document.getElementById('word-count-display').textContent = '0';
-      document.getElementById('guess-input').value = '';
+      document.getElementById('hotseat-round-label').textContent = 'Runde ' + hotSeatRoundNumber + '/' + hotSeatTotalRounds;
+      document.getElementById('hotseat-host-verify-box').style.display = canVerify ? 'flex' : 'none';
+      document.getElementById('hotseat-host-correct-btn').style.display = canVerify ? 'block' : 'none';
       showScreen('screen-hotseat');
     } else {
       document.getElementById('clue-category-text').textContent = category;
       document.getElementById('hotseat-name-display').textContent = hotSeatName + ' er i hot seat 🔥';
       document.getElementById('clue-word-count').textContent = '0';
+      document.getElementById('clue-round-label').textContent = 'Runde ' + hotSeatRoundNumber + '/' + hotSeatTotalRounds;
+      document.getElementById('host-verify-box').style.display = canVerify ? 'flex' : 'none';
+      document.getElementById('host-correct-btn').style.display = canVerify ? 'block' : 'none';
       showScreen('screen-clue');
     }
   });
@@ -1298,19 +1358,41 @@
     document.getElementById('clue-word-count').textContent = count;
   });
 
-  socket.on('round_end', ({ correct, category, hotSeatName, guess, isHost: hostId }) => {
+  socket.on('round_end', ({ category, hotSeatName, wordCount, pointsAwarded, totalScore, roundNumber, totalRounds, isHost: hostId }) => {
     const card = document.getElementById('result-card');
-    card.className = 'result-card ' + (correct ? 'correct' : 'wrong');
-    document.getElementById('result-emoji').textContent = correct ? '🎉' : '💀';
-    document.getElementById('result-title').textContent = correct ? 'Riktig!' : 'Feil!';
-    document.getElementById('result-sub').textContent = correct
-      ? hotSeatName + ' gjettet riktig: "' + guess + '"'
-      : hotSeatName + ' gjettet "' + guess + '"';
+    card.className = 'result-card correct';
+    document.getElementById('result-emoji').textContent = '🎯';
+    document.getElementById('result-title').textContent = 'Riktig!';
+    document.getElementById('result-sub').textContent = hotSeatName + ' fikk kategorien!';
     document.getElementById('result-category').textContent = category;
+    document.getElementById('hotseat-score-meta').textContent =
+      'Runde ' + roundNumber + ' av ' + totalRounds + ' · ' + wordCount + ' ord brukt · +' + pointsAwarded + ' poeng (totalt ' + totalScore + ')';
     const amHost = socket.id === hostId;
     document.getElementById('host-result-btn').style.display = amHost ? 'block' : 'none';
     document.getElementById('guest-result-msg').style.display = amHost ? 'none' : 'block';
+    if (amHost) {
+      const btn = document.querySelector('#host-result-btn button');
+      btn.textContent = roundNumber >= totalRounds ? 'Se leaderboard →' : 'Neste runde →';
+    }
     showScreen('screen-result');
+  });
+
+  socket.on('hotseat_game_over', ({ leaderboard, totalRounds }) => {
+    const list = document.getElementById('hotseat-leaderboard-list');
+    list.innerHTML = '';
+    document.getElementById('hotseat-leaderboard-sub').textContent = 'Etter ' + totalRounds + ' runder';
+
+    leaderboard.forEach((entry, i) => {
+      const row = document.createElement('div');
+      row.className = 'leader-row' + (i === 0 ? ' top-1' : '');
+      row.innerHTML =
+        '<div class="leader-rank">#' + (i + 1) + '</div>' +
+        '<div class="leader-name">' + escapeHtml(entry.name) + '</div>' +
+        '<div class="leader-score">' + entry.score + ' poeng</div>';
+      list.appendChild(row);
+    });
+
+    showScreen('screen-hotseat-leaderboard');
   });
 
   // ── Hvem sendte det? ──
@@ -1504,6 +1586,7 @@
       showJoin();
     }
     updateRoundPickerUI();
+    updateHotSeatRoundPickerUI();
   });
 </script>
 </body>
