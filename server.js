@@ -295,7 +295,7 @@ function restoreRemovedPlayer({ room, token, name, socketId }) {
   if (room.gameType === 'hotseat' && room.state !== 'lobby' && room.state !== 'game_over') {
     const turnsToRestore = Number.isInteger(removed.remainingHotSeatTurns)
       ? Math.max(0, removed.remainingHotSeatTurns)
-      : room.hotSeatGuessesPerPlayer;
+      : 0;
     for (let i = 0; i < turnsToRestore; i++) {
       room.hotSeatOrder.push(socketId);
     }
