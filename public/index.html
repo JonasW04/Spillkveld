@@ -1823,9 +1823,11 @@
 
 <script>
   const socket = io();
+  const SESSION_KEY = 'spillkveld_session_v1';
   let myName = '';
   let myCode = '';
   let isHost = false;
+  let myToken = '';
   let currentWordCount = 0;
   let hotSeatGuessesPerPlayer = 1;
   let hotSeatTotalRounds = 0;
@@ -1856,6 +1858,44 @@
   const SPECIAL_NAME4 = 'seb';
   const SPECIAL_NAME_CONFIRMED = 'Sebastian';
   const SPECIAL_NAME_REJECTED = 'Ikke Sebastian';
+
+  function createPlayerToken() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    return 'p_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+
+  function saveSession() {
+    if (!myCode || !myName || !myToken) return;
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify({
+        code: myCode,
+        name: myName,
+        token: myToken,
+      }));
+    } catch (_) { /* ignore storage failures */ }
+  }
+
+  function clearSession() {
+    try { localStorage.removeItem(SESSION_KEY); } catch (_) { /* ignore storage failures */ }
+  }
+
+  function loadSession() {
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.code || !parsed.name || !parsed.token) return null;
+      return parsed;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function ensurePlayerToken() {
+    if (!myToken) myToken = createPlayerToken();
+  }
 
   const AVATAR_COLORS = ['#FF5500','#00E5C3','#9B5DE5','#F15BB5','#FEE440','#00BBF9','#FF9F1C','#2EC4B6'];
   const PAPER_COLORS  = ['#c48a8a','#7a8a6a','#d4a24a','#c66a4a','#6b7a8a','#8a6b7a','#a88a5a','#9a7a8a'];
@@ -2034,8 +2074,9 @@
     if (!currentGame) return showError('create-error', 'Velg et spill først');
     const name = await resolvePlayerName(enteredName);
     myName = name;
+    ensurePlayerToken();
     isHost = true;
-    socket.emit('create_room', { name, gameType: currentGame });
+    socket.emit('create_room', { name, gameType: currentGame, playerToken: myToken });
   }
 
   async function joinRoom() {
@@ -2045,7 +2086,10 @@
     if (!enteredName) return showError('join-error', 'Skriv inn navnet ditt');
     const name = await resolvePlayerName(enteredName);
     myName = name;
-    socket.emit('join_room', { code, name });
+    myCode = code;
+    ensurePlayerToken();
+    saveSession();
+    socket.emit('join_room', { code, name, playerToken: myToken });
   }
 
   function startGame() { socket.emit('start_game'); }
@@ -2114,6 +2158,7 @@
     if (hint) hint.textContent = 'Spilles over ' + hsdSelectedRounds + ' runder · Trenger minst 3 spillere';
   }
   function goToFrontPage() {
+    clearSession();
     window.location.href = window.location.origin;
   }
 
@@ -2221,10 +2266,65 @@
   }
 
   // ───────── Socket events ─────────
+  function showLobbyByRole(gameType) {
+    if (gameType === 'hvem-sendte-det') {
+      if (isHost) {
+        document.getElementById('hsd-host-code').textContent = myCode;
+        showScreen('screen-hsd-lobby-host');
+      } else {
+        document.getElementById('hsd-guest-code').textContent = myCode;
+        showScreen('screen-hsd-lobby-guest');
+      }
+      return;
+    }
+    if (gameType === 'msl') {
+      if (isHost) {
+        document.getElementById('msl-host-code').textContent = myCode;
+        showScreen('screen-msl-lobby-host');
+      } else {
+        document.getElementById('msl-guest-code').textContent = myCode;
+        document.getElementById('msl-guest-name').textContent = 'Du er ' + myName;
+        showScreen('screen-msl-lobby-guest');
+      }
+      return;
+    }
+    if (isHost) {
+      document.getElementById('display-code').textContent = myCode;
+      showScreen('screen-lobby-host');
+    } else {
+      document.getElementById('guest-display-code').textContent = myCode;
+      showScreen('screen-lobby-guest');
+    }
+  }
+
+  socket.on('connect', () => {
+    const saved = loadSession();
+    if (!saved) return;
+    myCode = String(saved.code || '').toUpperCase();
+    myName = saved.name;
+    myToken = saved.token;
+    socket.emit('resume_session', { code: myCode, name: myName, playerToken: myToken });
+  });
+
+  socket.on('resume_failed', () => {
+    clearSession();
+  });
+
+  socket.on('session_resumed', ({ code, gameType, name, isHost: host }) => {
+    myCode = code;
+    myName = name;
+    isHost = !!host;
+    currentGame = gameType;
+    applyTheme(gameType);
+    saveSession();
+    showLobbyByRole(gameType);
+  });
+
   socket.on('room_created', ({ code, gameType }) => {
     myCode = code;
     currentGame = gameType;
     applyTheme(gameType);
+    saveSession();
 
     if (gameType === 'hvem-sendte-det') {
       document.getElementById('hsd-host-code').textContent = code;
@@ -2256,6 +2356,8 @@
     myCode = code;
     currentGame = gameType;
     applyTheme(gameType);
+    isHost = false;
+    saveSession();
     if (gameType === 'hvem-sendte-det') {
       document.getElementById('hsd-guest-code').textContent = code;
       showScreen('screen-hsd-lobby-guest');
@@ -2269,7 +2371,10 @@
     }
   });
 
-  socket.on('join_error', (msg) => showError('join-error', msg));
+  socket.on('join_error', (msg) => {
+    clearSession();
+    showError('join-error', msg);
+  });
   socket.on('game_error', (msg) => alert(msg));
 
   socket.on('lobby_update', (data) => {
@@ -2403,7 +2508,27 @@
     showScreen('screen-hsd-voting');
   });
 
-  socket.on('hsd_vote_count', () => { /* could show progress if needed */ });
+  socket.on('hsd_vote_count', ({ count, total } = {}) => {
+    const waiting = document.getElementById('hsd-vote-waiting');
+    if (waiting && count != null && total != null) {
+      waiting.textContent = count + '/' + total + ' har sendt inn';
+    }
+  });
+
+  socket.on('hsd_answer_restored', () => {
+    const input = document.getElementById('hsd-answer-input');
+    input.disabled = true;
+    document.getElementById('hsd-submit-answer-btn').style.display = 'none';
+    document.getElementById('hsd-answer-waiting').style.display = 'block';
+  });
+
+  socket.on('hsd_vote_restored', ({ votes } = {}) => {
+    if (!Array.isArray(votes) || votes.length === 0) return;
+    hsdMyVotes = votes.slice();
+    hsdVoteIdx = Math.min(votes.length - 1, Math.max(0, hsdAnswers.length - 1));
+    document.getElementById('hsd-vote-next-btn').style.display = 'none';
+    document.getElementById('hsd-vote-waiting').style.display = 'block';
+  });
 
   socket.on('hsd_reveal', ({ answers, players, myCorrect, total, myTotalScore, roundNumber, totalRounds, isHost: hostId }) => {
     document.getElementById('hsd-score-big').innerHTML = myCorrect + ' <span class="av-sub">av</span> ' + total;
@@ -2493,6 +2618,16 @@
         (hasVoted ? '<div class="check">✓</div>' : '');
       strip.appendChild(cell);
     });
+  });
+
+  socket.on('msl_vote_restored', ({ votedFor }) => {
+    if (!votedFor) return;
+    mslSelectedVote = votedFor;
+    document.getElementById('msl-vote-btn').disabled = true;
+    document.getElementById('msl-vote-btn').textContent = 'Stemt!';
+    showScreen('screen-msl-waiting');
+    document.getElementById('msl-wait-statement').textContent = '…' + mslStatement + '.';
+    document.getElementById('msl-wait-round-label').textContent = 'Runde ' + mslCurrentRound + '/' + mslTotalRounds;
   });
 
   socket.on('msl_results', ({ statement, players, winners, isTie, totalVotes, myDelta, myTotalScore, roundNumber, totalRounds, isHost: hostId }) => {
@@ -2702,6 +2837,14 @@
 
   // ── Direct URL with code ──
   window.addEventListener('load', () => {
+    const saved = loadSession();
+    if (saved) {
+      myToken = saved.token;
+      const joinName = document.getElementById('join-name');
+      if (joinName && !joinName.value) joinName.value = saved.name;
+      const joinCode = document.getElementById('join-code');
+      if (joinCode && !joinCode.value) joinCode.value = String(saved.code || '').toUpperCase();
+    }
     const params = new URLSearchParams(window.location.search);
     if (params.get('code')) {
       // Skip picker — go straight to join. Game type is set when server responds.
