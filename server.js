@@ -231,6 +231,73 @@ function findPlayerByToken(room, token) {
   return room.players.find((p) => p.token === token) || null;
 }
 
+function pickHotSeatCategory(room, excludeCategory = null) {
+  if (!room) return null;
+  if (!Array.isArray(room.hotSeatUsedCategories)) room.hotSeatUsedCategories = [];
+
+  const used = new Set(room.hotSeatUsedCategories);
+  let available = CATEGORIES.filter((c) => !used.has(c) && c !== excludeCategory);
+  if (available.length === 0) {
+    available = CATEGORIES.filter((c) => !used.has(c));
+  }
+  if (available.length === 0) {
+    room.hotSeatUsedCategories = excludeCategory ? [excludeCategory] : [];
+    available = CATEGORIES.filter((c) => c !== excludeCategory);
+    if (available.length === 0) available = [...CATEGORIES];
+  }
+
+  const category = available[Math.floor(Math.random() * available.length)];
+  room.hotSeatUsedCategories.push(category);
+  return category;
+}
+
+function removePlayerFromRoomState(room, removedId) {
+  if (!room || !removedId) return;
+  delete room.hsdScores[removedId];
+  delete room.hotSeatScores[removedId];
+  delete room.mslScores[removedId];
+  room.hotSeatOrder = room.hotSeatOrder.filter((id) => id !== removedId);
+  room.hotSeatTotalRounds = room.hotSeatOrder.length;
+  if (room.currentRound && room.currentRound.votes) {
+    delete room.currentRound.votes[removedId];
+    Object.keys(room.currentRound.votes).forEach((voterId) => {
+      if (room.currentRound.votes[voterId] === removedId) {
+        delete room.currentRound.votes[voterId];
+      }
+    });
+  }
+  if (room.currentRound && Array.isArray(room.currentRound.answers)) {
+    room.currentRound.answers = room.currentRound.answers.filter((a) => a.playerId !== removedId);
+  }
+  if (room.currentRound && room.currentRound.hotSeatId === removedId) {
+    room.currentRound.hotSeatId = null;
+  }
+}
+
+function restoreRemovedPlayer({ room, token, name, socketId }) {
+  if (!room || !token || !socketId) return null;
+  if (!room.removedPlayersByToken || !room.removedPlayersByToken[token]) return null;
+  const removed = room.removedPlayersByToken[token];
+  if (name && String(removed.name).toLowerCase() !== String(name).toLowerCase()) return null;
+  if (room.players.find((p) => p.name.toLowerCase() === removed.name.toLowerCase())) return null;
+
+  const player = { id: socketId, name: removed.name, token, connected: true, removalTimeout: null };
+  room.players.push(player);
+  room.hsdScores[socketId] = removed.hsdScore || 0;
+  room.hotSeatScores[socketId] = removed.hotSeatScore || 0;
+  room.mslScores[socketId] = removed.mslScore || 0;
+
+  if (room.gameType === 'hotseat' && room.state !== 'lobby' && room.state !== 'game_over') {
+    for (let i = 0; i < room.hotSeatGuessesPerPlayer; i++) {
+      room.hotSeatOrder.push(socketId);
+    }
+    room.hotSeatTotalRounds = room.hotSeatOrder.length;
+  }
+
+  delete room.removedPlayersByToken[token];
+  return player;
+}
+
 function schedulePlayerRemoval(code, token) {
   const room = rooms[code];
   if (!room) return;
@@ -243,26 +310,15 @@ function schedulePlayerRemoval(code, token) {
     const latestPlayer = findPlayerByToken(latestRoom, token);
     if (!latestPlayer || latestPlayer.connected) return;
     const removedId = latestPlayer.id;
+    if (!latestRoom.removedPlayersByToken) latestRoom.removedPlayersByToken = {};
+    latestRoom.removedPlayersByToken[token] = {
+      name: latestPlayer.name,
+      hsdScore: latestRoom.hsdScores[removedId] || 0,
+      hotSeatScore: latestRoom.hotSeatScores[removedId] || 0,
+      mslScore: latestRoom.mslScores[removedId] || 0,
+    };
     latestRoom.players = latestRoom.players.filter((p) => p.token !== token);
-    delete latestRoom.hsdScores[removedId];
-    delete latestRoom.hotSeatScores[removedId];
-    delete latestRoom.mslScores[removedId];
-    latestRoom.hotSeatOrder = latestRoom.hotSeatOrder.filter((id) => id !== removedId);
-    latestRoom.hotSeatTotalRounds = latestRoom.hotSeatOrder.length;
-    if (latestRoom.currentRound && latestRoom.currentRound.votes) {
-      delete latestRoom.currentRound.votes[removedId];
-      Object.keys(latestRoom.currentRound.votes).forEach((voterId) => {
-        if (latestRoom.currentRound.votes[voterId] === removedId) {
-          delete latestRoom.currentRound.votes[voterId];
-        }
-      });
-    }
-    if (latestRoom.currentRound && Array.isArray(latestRoom.currentRound.answers)) {
-      latestRoom.currentRound.answers = latestRoom.currentRound.answers.filter((a) => a.playerId !== removedId);
-    }
-    if (latestRoom.currentRound && latestRoom.currentRound.hotSeatId === removedId) {
-      latestRoom.currentRound.hotSeatId = null;
-    }
+    removePlayerFromRoomState(latestRoom, removedId);
     if (latestRoom.players.length === 0) {
       delete rooms[code];
       return;
@@ -570,7 +626,7 @@ function startHotSeatRound(code) {
 
   room.lastHotSeat = hotSeat.name;
 
-  const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
+  const category = pickHotSeatCategory(room);
   room.currentRound = {
     category,
     hotSeatId: hotSeat.id,
@@ -857,6 +913,8 @@ io.on('connection', (socket) => {
       mslRoundNumber: 0,
       mslScores: { [socket.id]: 0 },
       mslStatementPool: [],
+      removedPlayersByToken: {},
+      hotSeatUsedCategories: [],
     };
     socket.playerToken = token;
     socket.join(code);
@@ -870,11 +928,21 @@ io.on('connection', (socket) => {
     if (!room) return socket.emit('join_error', 'Fant ikke rommet 🤔');
     const token = String(playerToken || '').trim();
     if (!token) return socket.emit('join_error', 'Mangler spiller-økt');
-    if (room.state !== 'lobby') return socket.emit('join_error', 'Spillet er allerede i gang');
+    const upper = code.toUpperCase();
+    if (room.state !== 'lobby') {
+      const restored = restoreRemovedPlayer({ room, token, name, socketId: socket.id });
+      if (!restored) return socket.emit('join_error', 'Spillet er allerede i gang');
+      socket.playerToken = token;
+      socket.join(upper);
+      socket.roomCode = upper;
+      socket.emit('joined', { code: upper, isHost: false, name: restored.name, gameType: room.gameType });
+      emitLobbyUpdate(upper);
+      emitResumeState(socket, room);
+      return;
+    }
     if (room.players.find(p => p.name.toLowerCase() === name.toLowerCase())) {
       return socket.emit('join_error', 'Det er allerede en spiller med det navnet');
     }
-    const upper = code.toUpperCase();
     room.players.push({ id: socket.id, name, token, connected: true, removalTimeout: null });
     room.hsdScores[socket.id] = room.hsdScores[socket.id] || 0;
     room.hotSeatScores[socket.id] = room.hotSeatScores[socket.id] || 0;
@@ -893,7 +961,23 @@ io.on('connection', (socket) => {
     if (!upper || !token || !room) return socket.emit('resume_failed');
 
     const player = findPlayerByToken(room, token);
-    if (!player) return socket.emit('resume_failed');
+    if (!player) {
+      const restored = restoreRemovedPlayer({ room, token, name, socketId: socket.id });
+      if (!restored) return socket.emit('resume_failed');
+      socket.playerToken = token;
+      socket.roomCode = upper;
+      socket.join(upper);
+      socket.emit('session_resumed', {
+        code: upper,
+        name: restored.name,
+        gameType: room.gameType,
+        isHost: room.host === socket.id,
+        state: room.state,
+      });
+      emitLobbyUpdate(upper);
+      emitResumeState(socket, room);
+      return;
+    }
     if (name && String(player.name).toLowerCase() !== String(name).toLowerCase()) {
       return socket.emit('resume_failed');
     }
@@ -984,6 +1068,7 @@ io.on('connection', (socket) => {
       startMslRound(code);
     } else {
       room.hotSeatRoundNumber = 1;
+      room.hotSeatUsedCategories = [];
       room.hotSeatScores = {};
       room.players.forEach((p) => {
         room.hotSeatScores[p.id] = 0;
@@ -1056,6 +1141,23 @@ io.on('connection', (socket) => {
       roundNumber: room.hotSeatRoundNumber,
       totalRounds: room.hotSeatTotalRounds,
       isHost: room.host,
+    });
+  });
+
+  socket.on('hotseat_reroll_category', () => {
+    const code = socket.roomCode;
+    const room = rooms[code];
+    if (!room || room.gameType !== 'hotseat' || room.state !== 'playing' || !room.currentRound) return;
+    if (socket.id !== room.currentRound.hotSeatId && socket.id !== room.host) return;
+    const previousCategory = room.currentRound.category;
+    const nextCategory = pickHotSeatCategory(room, previousCategory);
+    if (!nextCategory || nextCategory === previousCategory) return;
+    room.currentRound.category = nextCategory;
+
+    io.to(code).emit('hotseat_category_rerolled', {
+      category: nextCategory,
+      roundNumber: room.hotSeatRoundNumber,
+      totalRounds: room.hotSeatTotalRounds,
     });
   });
 
