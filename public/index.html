@@ -301,6 +301,47 @@
     }
     .error-msg.show { display: block; }
 
+    .identity-check-modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(10, 8, 15, 0.75);
+      z-index: 1000;
+    }
+    .identity-check-modal.active { display: flex; }
+    .identity-check-card {
+      width: 100%;
+      max-width: 360px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .identity-check-card h3 {
+      margin: 0;
+      font-size: 24px;
+      color: #fff;
+    }
+    .identity-check-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+    .identity-check-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .identity-check-actions button { margin: 0; }
+
     @keyframes pulse-anim { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
     .pulse { animation: pulse-anim 2s ease-in-out infinite; }
 
@@ -1347,6 +1388,7 @@
   </div>
   <p class="sub" id="hotseat-round-label">Runde 1/1</p>
   <p class="sub">Si gjetningen høyt. Verten trykker når du er riktig.</p>
+  <button id="hotseat-reroll-btn" class="btn-teal" onclick="rerollHotSeatCategory()" style="display:none;">🔁 Ny kategori</button>
   <div id="hotseat-host-verify-box" class="info-row" style="display:none;">
     <div class="dot" style="background:var(--teal)"></div>
     <span>Vert: bekreft når du har gjettet riktig</span>
@@ -1769,11 +1811,24 @@
   <button class="btn-primary" onclick="goToFrontPage()" style="margin-top:14px;">Spill igjen</button>
 </div>
 
+<div id="identity-check-modal" class="identity-check-modal" aria-hidden="true">
+  <div class="identity-check-card" role="dialog" aria-modal="true" aria-labelledby="identity-check-title" aria-describedby="identity-check-text">
+    <h3 id="identity-check-title">Identitetssjekk</h3>
+    <p id="identity-check-text">Kom du for sent i dag?</p>
+    <div class="identity-check-actions">
+      <button id="identity-check-yes" class="btn-primary" type="button">Ja</button>
+      <button id="identity-check-no" class="btn-secondary" type="button">Nei</button>
+    </div>
+  </div>
+</div>
+
 <script>
   const socket = io();
+  const SESSION_KEY = 'spillkveld_session_v1';
   let myName = '';
   let myCode = '';
   let isHost = false;
+  let myToken = '';
   let currentWordCount = 0;
   let hotSeatGuessesPerPlayer = 1;
   let hotSeatTotalRounds = 0;
@@ -1798,6 +1853,51 @@
   let mslStatement = '';
   let mslCurrentRound = 0;
   let mslTotalRounds = 0;
+  const SPECIAL_NAME = 'sebastian';
+  const SPECIAL_NAME2 = 'sebbe';
+  const SPECIAL_NAME3 = 'aarsheim';
+  const SPECIAL_NAME4 = 'seb';
+  const SPECIAL_NAME_CONFIRMED = 'Sebastian';
+  const SPECIAL_NAME_REJECTED = 'Ikke Sebastian';
+  const REROLL_COOLDOWN_MS = 350;
+
+  function createPlayerToken() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    return 'p_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+  }
+
+  function saveSession() {
+    if (!myCode || !myName || !myToken) return;
+    try {
+      localStorage.setItem(SESSION_KEY, JSON.stringify({
+        code: myCode,
+        name: myName,
+        token: myToken,
+      }));
+    } catch (_) { /* ignore storage failures */ }
+  }
+
+  function clearSession() {
+    try { localStorage.removeItem(SESSION_KEY); } catch (_) { /* ignore storage failures */ }
+  }
+
+  function loadSession() {
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.code || !parsed.name || !parsed.token) return null;
+      return parsed;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function ensurePlayerToken() {
+    if (!myToken) myToken = createPlayerToken();
+  }
 
   const AVATAR_COLORS = ['#FF5500','#00E5C3','#9B5DE5','#F15BB5','#FEE440','#00BBF9','#FF9F1C','#2EC4B6'];
   const PAPER_COLORS  = ['#c48a8a','#7a8a6a','#d4a24a','#c66a4a','#6b7a8a','#8a6b7a','#a88a5a','#9a7a8a'];
@@ -1922,28 +2022,89 @@
     else showScreen('screen-home');
   }
 
-  function createRoom() {
-    const name = document.getElementById('create-name').value.trim();
-    if (!name) return showError('create-error', 'Skriv inn navnet ditt');
-    if (!currentGame) return showError('create-error', 'Velg et spill først');
-    myName = name;
-    isHost = true;
-    socket.emit('create_room', { name, gameType: currentGame });
+  function showSebastianIdentityCheck() {
+    const modal = document.getElementById('identity-check-modal');
+    const yesBtn = document.getElementById('identity-check-yes');
+    const noBtn = document.getElementById('identity-check-no');
+    const previousFocus = document.activeElement;
+    return new Promise((resolve) => {
+      const onKeyDown = (e) => {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          const buttons = [yesBtn, noBtn];
+          const currentIdx = buttons.indexOf(document.activeElement);
+          if (e.shiftKey) {
+            const prevIdx = currentIdx <= 0 ? buttons.length - 1 : currentIdx - 1;
+            buttons[prevIdx].focus();
+          } else {
+            const nextIdx = currentIdx === -1 || currentIdx >= buttons.length - 1 ? 0 : currentIdx + 1;
+            buttons[nextIdx].focus();
+          }
+        }
+      };
+      const close = (resolvedName) => {
+        yesBtn.onclick = null;
+        noBtn.onclick = null;
+        modal.removeEventListener('keydown', onKeyDown);
+        modal.classList.remove('active');
+        modal.setAttribute('aria-hidden', 'true');
+        if (previousFocus && typeof previousFocus.focus === 'function') {
+          try { previousFocus.focus(); } catch { /* element may be detached */ }
+        }
+        resolve(resolvedName);
+      };
+      yesBtn.onclick = () => close(SPECIAL_NAME_CONFIRMED);
+      noBtn.onclick = () => close(SPECIAL_NAME_REJECTED);
+      modal.addEventListener('keydown', onKeyDown);
+      modal.classList.add('active');
+      modal.setAttribute('aria-hidden', 'false');
+      yesBtn.focus();
+    });
   }
 
-  function joinRoom() {
-    const code = document.getElementById('join-code').value.trim().toUpperCase();
-    const name = document.getElementById('join-name').value.trim();
-    if (!code || code.length !== 4) return showError('join-error', 'Skriv inn 4-tegns koden');
-    if (!name) return showError('join-error', 'Skriv inn navnet ditt');
+  async function resolvePlayerName(name) {
+    if (name.toLowerCase() == SPECIAL_NAME) return showSebastianIdentityCheck(); 
+    if (name.toLowerCase() == SPECIAL_NAME2) return showSebastianIdentityCheck(); 
+    if (name.toLowerCase() == SPECIAL_NAME3) return showSebastianIdentityCheck(); 
+    if (name.toLowerCase() == SPECIAL_NAME4) return showSebastianIdentityCheck(); 
+    return name;
+  }
+
+  async function createRoom() {
+    const enteredName = document.getElementById('create-name').value.trim();
+    if (!enteredName) return showError('create-error', 'Skriv inn navnet ditt');
+    if (!currentGame) return showError('create-error', 'Velg et spill først');
+    const name = await resolvePlayerName(enteredName);
     myName = name;
-    socket.emit('join_room', { code, name });
+    ensurePlayerToken();
+    isHost = true;
+    socket.emit('create_room', { name, gameType: currentGame, playerToken: myToken });
+  }
+
+  async function joinRoom() {
+    const code = document.getElementById('join-code').value.trim().toUpperCase();
+    const enteredName = document.getElementById('join-name').value.trim();
+    if (!code || code.length !== 4) return showError('join-error', 'Skriv inn 4-tegns koden');
+    if (!enteredName) return showError('join-error', 'Skriv inn navnet ditt');
+    const name = await resolvePlayerName(enteredName);
+    myName = name;
+    myCode = code;
+    ensurePlayerToken();
+    saveSession();
+    socket.emit('join_room', { code, name, playerToken: myToken });
   }
 
   function startGame() { socket.emit('start_game'); }
   function wordSaid() { socket.emit('word_said'); }
   function nextRound() { socket.emit('next_round'); }
   function markHotSeatCorrect() { socket.emit('hotseat_mark_correct'); }
+  function rerollHotSeatCategory() {
+    const btn = document.getElementById('hotseat-reroll-btn');
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    socket.emit('hotseat_reroll_category');
+    setTimeout(() => { btn.disabled = false; }, REROLL_COOLDOWN_MS);
+  }
   function setHotSeatRounds(perPlayerRounds) {
     hotSeatGuessesPerPlayer = perPlayerRounds;
     updateHotSeatRoundPickerUI();
@@ -2006,6 +2167,7 @@
     if (hint) hint.textContent = 'Spilles over ' + hsdSelectedRounds + ' runder · Trenger minst 3 spillere';
   }
   function goToFrontPage() {
+    clearSession();
     window.location.href = window.location.origin;
   }
 
@@ -2113,10 +2275,65 @@
   }
 
   // ───────── Socket events ─────────
+  function showLobbyByRole(gameType) {
+    if (gameType === 'hvem-sendte-det') {
+      if (isHost) {
+        document.getElementById('hsd-host-code').textContent = myCode;
+        showScreen('screen-hsd-lobby-host');
+      } else {
+        document.getElementById('hsd-guest-code').textContent = myCode;
+        showScreen('screen-hsd-lobby-guest');
+      }
+      return;
+    }
+    if (gameType === 'msl') {
+      if (isHost) {
+        document.getElementById('msl-host-code').textContent = myCode;
+        showScreen('screen-msl-lobby-host');
+      } else {
+        document.getElementById('msl-guest-code').textContent = myCode;
+        document.getElementById('msl-guest-name').textContent = 'Du er ' + myName;
+        showScreen('screen-msl-lobby-guest');
+      }
+      return;
+    }
+    if (isHost) {
+      document.getElementById('display-code').textContent = myCode;
+      showScreen('screen-lobby-host');
+    } else {
+      document.getElementById('guest-display-code').textContent = myCode;
+      showScreen('screen-lobby-guest');
+    }
+  }
+
+  socket.on('connect', () => {
+    const saved = loadSession();
+    if (!saved) return;
+    myCode = String(saved.code || '').toUpperCase();
+    myName = saved.name;
+    myToken = saved.token;
+    socket.emit('resume_session', { code: myCode, name: myName, playerToken: myToken });
+  });
+
+  socket.on('resume_failed', () => {
+    clearSession();
+  });
+
+  socket.on('session_resumed', ({ code, gameType, name, isHost: host }) => {
+    myCode = code;
+    myName = name;
+    isHost = !!host;
+    currentGame = gameType;
+    applyTheme(gameType);
+    saveSession();
+    showLobbyByRole(gameType);
+  });
+
   socket.on('room_created', ({ code, gameType }) => {
     myCode = code;
     currentGame = gameType;
     applyTheme(gameType);
+    saveSession();
 
     if (gameType === 'hvem-sendte-det') {
       document.getElementById('hsd-host-code').textContent = code;
@@ -2144,10 +2361,12 @@
     }
   });
 
-  socket.on('joined', ({ code, gameType }) => {
+  socket.on('joined', ({ code, gameType, isHost: host }) => {
     myCode = code;
     currentGame = gameType;
     applyTheme(gameType);
+    isHost = !!host;
+    saveSession();
     if (gameType === 'hvem-sendte-det') {
       document.getElementById('hsd-guest-code').textContent = code;
       showScreen('screen-hsd-lobby-guest');
@@ -2161,7 +2380,10 @@
     }
   });
 
-  socket.on('join_error', (msg) => showError('join-error', msg));
+  socket.on('join_error', (msg) => {
+    clearSession();
+    showError('join-error', msg);
+  });
   socket.on('game_error', (msg) => alert(msg));
 
   socket.on('lobby_update', (data) => {
@@ -2206,12 +2428,16 @@
     hotSeatRoundNumber = roundNumber || hotSeatRoundNumber;
     hotSeatTotalRounds = totalRounds || hotSeatTotalRounds;
     if (isHotSeat) {
+      const rerollBtn = document.getElementById('hotseat-reroll-btn');
+      rerollBtn.style.display = 'block';
+      rerollBtn.disabled = false;
       document.getElementById('word-count-display').textContent = '0';
       document.getElementById('hotseat-round-label').textContent = 'Runde ' + hotSeatRoundNumber + '/' + hotSeatTotalRounds;
       document.getElementById('hotseat-host-verify-box').style.display = canVerify ? 'flex' : 'none';
       document.getElementById('hotseat-host-correct-btn').style.display = canVerify ? 'block' : 'none';
       showScreen('screen-hotseat');
     } else {
+      document.getElementById('hotseat-reroll-btn').style.display = 'none';
       document.getElementById('clue-category-text').textContent = category;
       document.getElementById('hotseat-name-display').textContent = hotSeatName + ' er i hot seat 🔥';
       document.getElementById('clue-word-count').textContent = '0';
@@ -2225,6 +2451,10 @@
   socket.on('word_count', (count) => {
     document.getElementById('word-count-display').textContent = count;
     document.getElementById('clue-word-count').textContent = count;
+  });
+
+  socket.on('hotseat_category_rerolled', ({ category }) => {
+    if (category) document.getElementById('clue-category-text').textContent = category;
   });
 
   socket.on('round_end', ({ category, hotSeatName, wordCount, pointsAwarded, totalScore, roundNumber, totalRounds, isHost: hostId }) => {
@@ -2295,7 +2525,27 @@
     showScreen('screen-hsd-voting');
   });
 
-  socket.on('hsd_vote_count', () => { /* could show progress if needed */ });
+  socket.on('hsd_vote_count', ({ count, total } = {}) => {
+    const waiting = document.getElementById('hsd-vote-waiting');
+    if (waiting && count !== null && count !== undefined && total !== null && total !== undefined) {
+      waiting.textContent = count + '/' + total + ' har sendt inn';
+    }
+  });
+
+  socket.on('hsd_answer_restored', () => {
+    const input = document.getElementById('hsd-answer-input');
+    input.disabled = true;
+    document.getElementById('hsd-submit-answer-btn').style.display = 'none';
+    document.getElementById('hsd-answer-waiting').style.display = 'block';
+  });
+
+  socket.on('hsd_vote_restored', ({ votes } = {}) => {
+    if (!Array.isArray(votes) || votes.length === 0) return;
+    hsdMyVotes = votes.slice();
+    hsdVoteIdx = Math.max(0, votes.length - 1);
+    document.getElementById('hsd-vote-next-btn').style.display = 'none';
+    document.getElementById('hsd-vote-waiting').style.display = 'block';
+  });
 
   socket.on('hsd_reveal', ({ answers, players, myCorrect, total, myTotalScore, roundNumber, totalRounds, isHost: hostId }) => {
     document.getElementById('hsd-score-big').innerHTML = myCorrect + ' <span class="av-sub">av</span> ' + total;
@@ -2385,6 +2635,16 @@
         (hasVoted ? '<div class="check">✓</div>' : '');
       strip.appendChild(cell);
     });
+  });
+
+  socket.on('msl_vote_restored', ({ votedFor }) => {
+    if (!votedFor) return;
+    mslSelectedVote = votedFor;
+    document.getElementById('msl-vote-btn').disabled = true;
+    document.getElementById('msl-vote-btn').textContent = 'Stemt!';
+    showScreen('screen-msl-waiting');
+    document.getElementById('msl-wait-statement').textContent = '…' + mslStatement + '.';
+    document.getElementById('msl-wait-round-label').textContent = 'Runde ' + mslCurrentRound + '/' + mslTotalRounds;
   });
 
   socket.on('msl_results', ({ statement, players, winners, isTie, totalVotes, myDelta, myTotalScore, roundNumber, totalRounds, isHost: hostId }) => {
@@ -2594,6 +2854,14 @@
 
   // ── Direct URL with code ──
   window.addEventListener('load', () => {
+    const saved = loadSession();
+    if (saved) {
+      myToken = saved.token;
+      const joinName = document.getElementById('join-name');
+      if (joinName && !joinName.value) joinName.value = saved.name;
+      const joinCode = document.getElementById('join-code');
+      if (joinCode && !joinCode.value) joinCode.value = String(saved.code || '').toUpperCase();
+    }
     const params = new URLSearchParams(window.location.search);
     if (params.get('code')) {
       // Skip picker — go straight to join. Game type is set when server responds.
