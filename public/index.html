@@ -2510,7 +2510,7 @@
 
   socket.on('hsd_vote_count', ({ count, total } = {}) => {
     const waiting = document.getElementById('hsd-vote-waiting');
-    if (waiting && count != null && total != null) {
+    if (waiting && count !== null && count !== undefined && total !== null && total !== undefined) {
       waiting.textContent = count + '/' + total + ' har sendt inn';
     }
   });
