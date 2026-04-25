@@ -293,7 +293,10 @@ function restoreRemovedPlayer({ room, token, name, socketId }) {
   room.mslScores[socketId] = removed.mslScore || 0;
 
   if (room.gameType === 'hotseat' && room.state !== 'lobby' && room.state !== 'game_over') {
-    for (let i = 0; i < room.hotSeatGuessesPerPlayer; i++) {
+    const turnsToRestore = Number.isInteger(removed.remainingHotSeatTurns)
+      ? Math.max(0, removed.remainingHotSeatTurns)
+      : room.hotSeatGuessesPerPlayer;
+    for (let i = 0; i < turnsToRestore; i++) {
       room.hotSeatOrder.push(socketId);
     }
     room.hotSeatTotalRounds = room.hotSeatOrder.length;
@@ -315,12 +318,16 @@ function schedulePlayerRemoval(code, token) {
     const latestPlayer = findPlayerByToken(latestRoom, token);
     if (!latestPlayer || latestPlayer.connected) return;
     const removedId = latestPlayer.id;
+    const remainingHotSeatTurns = latestRoom.hotSeatOrder
+      .slice(latestRoom.hotSeatOrderIdx)
+      .filter((id) => id === removedId).length;
     if (!latestRoom.removedPlayersByToken) latestRoom.removedPlayersByToken = {};
     latestRoom.removedPlayersByToken[token] = {
       name: latestPlayer.name,
       hsdScore: latestRoom.hsdScores[removedId] || 0,
       hotSeatScore: latestRoom.hotSeatScores[removedId] || 0,
       mslScore: latestRoom.mslScores[removedId] || 0,
+      remainingHotSeatTurns,
     };
     latestRoom.players = latestRoom.players.filter((p) => p.token !== token);
     removePlayerFromRoomState(latestRoom, removedId);
@@ -1156,7 +1163,7 @@ io.on('connection', (socket) => {
     if (socket.id !== room.currentRound.hotSeatId && socket.id !== room.host) return;
     const previousCategory = room.currentRound.category;
     const nextCategory = pickHotSeatCategory(room, previousCategory);
-    if (!nextCategory || nextCategory === previousCategory) {
+    if (!nextCategory) {
       socket.emit('game_error', 'Ingen ny kategori tilgjengelig akkurat nå');
       return;
     }

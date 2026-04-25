@@ -1859,6 +1859,7 @@
   const SPECIAL_NAME4 = 'seb';
   const SPECIAL_NAME_CONFIRMED = 'Sebastian';
   const SPECIAL_NAME_REJECTED = 'Ikke Sebastian';
+  const REROLL_COOLDOWN_MS = 350;
 
   function createPlayerToken() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -2102,7 +2103,7 @@
     if (!btn || btn.disabled) return;
     btn.disabled = true;
     socket.emit('hotseat_reroll_category');
-    setTimeout(() => { btn.disabled = false; }, 350);
+    setTimeout(() => { btn.disabled = false; }, REROLL_COOLDOWN_MS);
   }
   function setHotSeatRounds(perPlayerRounds) {
     hotSeatGuessesPerPlayer = perPlayerRounds;
