@@ -1986,14 +1986,14 @@
       const onKeyDown = (e) => {
         if (e.key === 'Tab') {
           e.preventDefault();
-          const onYes = document.activeElement === yesBtn;
-          const onNo = document.activeElement === noBtn;
+          const buttons = [yesBtn, noBtn];
+          const currentIdx = buttons.indexOf(document.activeElement);
           if (e.shiftKey) {
-            if (onYes) noBtn.focus();
-            else yesBtn.focus();
+            const prevIdx = currentIdx <= 0 ? buttons.length - 1 : currentIdx - 1;
+            buttons[prevIdx].focus();
           } else {
-            if (onNo) yesBtn.focus();
-            else noBtn.focus();
+            const nextIdx = currentIdx === -1 || currentIdx >= buttons.length - 1 ? 0 : currentIdx + 1;
+            buttons[nextIdx].focus();
           }
         }
       };
@@ -2004,7 +2004,7 @@
         modal.classList.remove('active');
         modal.setAttribute('aria-hidden', 'true');
         if (previousFocus && typeof previousFocus.focus === 'function') {
-          try { previousFocus.focus(); } catch (error) { /* element may be detached */ }
+          try { previousFocus.focus(); } catch { /* element may be detached */ }
         }
         resolve(resolvedName);
       };
