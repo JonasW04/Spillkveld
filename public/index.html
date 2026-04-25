@@ -1388,6 +1388,7 @@
   </div>
   <p class="sub" id="hotseat-round-label">Runde 1/1</p>
   <p class="sub">Si gjetningen høyt. Verten trykker når du er riktig.</p>
+  <button id="hotseat-reroll-btn" class="btn-teal" onclick="rerollHotSeatCategory()" style="display:none;">🔁 Ny kategori</button>
   <div id="hotseat-host-verify-box" class="info-row" style="display:none;">
     <div class="dot" style="background:var(--teal)"></div>
     <span>Vert: bekreft når du har gjettet riktig</span>
@@ -1858,6 +1859,7 @@
   const SPECIAL_NAME4 = 'seb';
   const SPECIAL_NAME_CONFIRMED = 'Sebastian';
   const SPECIAL_NAME_REJECTED = 'Ikke Sebastian';
+  const REROLL_COOLDOWN_MS = 350;
 
   function createPlayerToken() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -2096,6 +2098,13 @@
   function wordSaid() { socket.emit('word_said'); }
   function nextRound() { socket.emit('next_round'); }
   function markHotSeatCorrect() { socket.emit('hotseat_mark_correct'); }
+  function rerollHotSeatCategory() {
+    const btn = document.getElementById('hotseat-reroll-btn');
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    socket.emit('hotseat_reroll_category');
+    setTimeout(() => { btn.disabled = false; }, REROLL_COOLDOWN_MS);
+  }
   function setHotSeatRounds(perPlayerRounds) {
     hotSeatGuessesPerPlayer = perPlayerRounds;
     updateHotSeatRoundPickerUI();
@@ -2419,12 +2428,16 @@
     hotSeatRoundNumber = roundNumber || hotSeatRoundNumber;
     hotSeatTotalRounds = totalRounds || hotSeatTotalRounds;
     if (isHotSeat) {
+      const rerollBtn = document.getElementById('hotseat-reroll-btn');
+      rerollBtn.style.display = 'block';
+      rerollBtn.disabled = false;
       document.getElementById('word-count-display').textContent = '0';
       document.getElementById('hotseat-round-label').textContent = 'Runde ' + hotSeatRoundNumber + '/' + hotSeatTotalRounds;
       document.getElementById('hotseat-host-verify-box').style.display = canVerify ? 'flex' : 'none';
       document.getElementById('hotseat-host-correct-btn').style.display = canVerify ? 'block' : 'none';
       showScreen('screen-hotseat');
     } else {
+      document.getElementById('hotseat-reroll-btn').style.display = 'none';
       document.getElementById('clue-category-text').textContent = category;
       document.getElementById('hotseat-name-display').textContent = hotSeatName + ' er i hot seat 🔥';
       document.getElementById('clue-word-count').textContent = '0';
@@ -2438,6 +2451,10 @@
   socket.on('word_count', (count) => {
     document.getElementById('word-count-display').textContent = count;
     document.getElementById('clue-word-count').textContent = count;
+  });
+
+  socket.on('hotseat_category_rerolled', ({ category }) => {
+    if (category) document.getElementById('clue-category-text').textContent = category;
   });
 
   socket.on('round_end', ({ category, hotSeatName, wordCount, pointsAwarded, totalScore, roundNumber, totalRounds, isHost: hostId }) => {
