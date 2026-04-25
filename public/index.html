@@ -1995,7 +1995,7 @@
   }
 
   async function resolvePlayerName(name) {
-    const trimmed = String(name || '').trim();
+    const trimmed = (name || '').trim();
     if (trimmed.toLowerCase() !== 'sebastian') return trimmed;
     return showSebastianIdentityCheck();
   }
