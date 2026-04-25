@@ -2187,12 +2187,13 @@
     players.forEach((p, i) => {
       const div = document.createElement('div');
       div.className = 'player-chip';
+      if (p.connected === false) div.style.opacity = '0.55';
       const color = AVATAR_COLORS[i % AVATAR_COLORS.length];
       const initial = p.name[0].toUpperCase();
       const youLabel = p.name === myName ? '<span style="color:var(--teal);font-size:12px;margin-left:auto">deg</span>' : '';
       div.innerHTML =
         '<div class="avatar" style="background:' + color + '22; color:' + color + '">' + initial + '</div>' +
-        '<span>' + escapeHtml(p.name) + '</span>' + youLabel;
+        '<span>' + escapeHtml(p.name) + (p.connected === false ? ' · kobler til' : '') + '</span>' + youLabel;
       list.appendChild(div);
     });
   }
@@ -2208,9 +2209,11 @@
       const cell = document.createElement('div');
       cell.className = 'avatar-cell';
       cell.style.cursor = 'default';
+      if (p.connected === false) cell.style.opacity = '0.55';
       cell.innerHTML =
         '<div class="av" style="background:' + color + '">' + escapeHtml(initials) + '</div>' +
         '<div class="av-name">' + escapeHtml(p.name) +
+          (p.connected === false ? ' · kobler til' : '') +
           (i === 0 ? ' <span title="vert" style="color:#d4a24a">✦</span>' : '') +
         '</div>';
       grid.appendChild(cell);
@@ -2238,9 +2241,10 @@
     players.forEach((p, i) => {
       const cell = document.createElement('div');
       cell.className = 'cell';
+      if (p.connected === false) cell.style.opacity = '0.55';
       const isMe = p.name === myName;
       cell.innerHTML = mlAvatarHTML({ name: p.name, idx: i }, 54, { ring: isMe }) +
-        '<span class="name">' + escapeHtml(p.name) + (isMe ? ' (du)' : '') + '</span>';
+        '<span class="name">' + escapeHtml(p.name) + (isMe ? ' (du)' : '') + (p.connected === false ? ' · kobler til' : '') + '</span>';
       grid.appendChild(cell);
     });
     // Empty slot if room
@@ -2255,14 +2259,13 @@
   function renderMslVoteGrid() {
     const grid = document.getElementById('msl-vote-grid');
     grid.innerHTML = '';
-    const others = mslPlayers.filter((p) => p.name !== myName);
-    others.forEach((p) => {
+    mslPlayers.forEach((p) => {
       const isSel = mslSelectedVote === p.id;
       const anySel = mslSelectedVote != null;
       const cell = document.createElement('button');
       cell.className = 'ml-vote-cell' + (isSel ? ' selected' : '');
       cell.innerHTML = mlAvatarHTML(p, 72, { ring: isSel, dim: anySel && !isSel }) +
-        '<span class="name">' + escapeHtml(p.name) + '</span>';
+        '<span class="name">' + escapeHtml(p.name) + (p.name === myName ? ' (du)' : '') + '</span>';
       cell.onclick = () => {
         mslSelectedVote = p.id;
         renderMslVoteGrid();
@@ -2397,19 +2400,21 @@
       renderHsdPlayers(players, 'hsd-lobby-grid-host', 'hsd-player-count-host');
       renderHsdPlayers(players, 'hsd-lobby-grid-guest', 'hsd-player-count-guest');
       const startBtn = document.getElementById('hsd-start-btn');
-      startBtn.disabled = players.length < 3;
-      startBtn.textContent = players.length < 3 ? 'Trenger minst 3 spillere' : 'Start spillet (' + players.length + ' spillere)';
+      const readyCount = players.filter((p) => p.connected !== false).length;
+      startBtn.disabled = readyCount < 3;
+      startBtn.textContent = readyCount < 3 ? 'Trenger minst 3 spillere' : 'Start spillet (' + readyCount + ' spillere)';
     } else if (gameType === 'msl') {
       if (selectedRounds) mslSelectedRounds = selectedRounds;
       updateMslRoundPickerUI();
       renderMslPlayers(players, 'msl-lobby-grid-host', 'msl-player-count-host');
       renderMslPlayers(players, 'msl-lobby-grid-guest', 'msl-player-count-guest');
       const startBtn = document.getElementById('msl-start-btn');
-      const canStart = players.length >= 3;
+      const readyCount = players.filter((p) => p.connected !== false).length;
+      const canStart = readyCount >= 3;
       startBtn.disabled = !canStart;
       startBtn.textContent = canStart
         ? 'Start spillet'
-        : 'Trenger ' + (3 - players.length) + ' spillere til';
+        : 'Trenger ' + (3 - readyCount) + ' spillere til';
     } else {
       hotSeatGuessesPerPlayer = data.hotSeatGuessesPerPlayer || hotSeatGuessesPerPlayer;
       hotSeatTotalRounds = data.hotSeatTotalRounds || (players.length * hotSeatGuessesPerPlayer);
@@ -2417,8 +2422,9 @@
       renderHotSeatPlayers(players, 'lobby-player-list', 'player-count');
       renderHotSeatPlayers(players, 'guest-player-list', 'guest-player-count');
       const startBtn = document.getElementById('start-btn');
-      startBtn.disabled = players.length < 2;
-      startBtn.textContent = players.length < 2 ? 'Trenger minst 2 spillere' : 'Start spillet (' + players.length + ' spillere) →';
+      const readyCount = players.filter((p) => p.connected !== false).length;
+      startBtn.disabled = readyCount < 2;
+      startBtn.textContent = readyCount < 2 ? 'Trenger minst 2 spillere' : 'Start spillet (' + readyCount + ' spillere) →';
     }
   });
 
@@ -2457,12 +2463,14 @@
     if (category) document.getElementById('clue-category-text').textContent = category;
   });
 
-  socket.on('round_end', ({ category, hotSeatName, wordCount, pointsAwarded, totalScore, roundNumber, totalRounds, isHost: hostId }) => {
+  socket.on('round_end', ({ category, hotSeatName, wordCount, pointsAwarded, totalScore, roundNumber, totalRounds, isHost: hostId, skipped }) => {
     const card = document.getElementById('result-card');
     card.className = 'result-card correct';
-    document.getElementById('result-emoji').textContent = '🎯';
-    document.getElementById('result-title').textContent = 'Riktig!';
-    document.getElementById('result-sub').textContent = hotSeatName + ' fikk kategorien!';
+    document.getElementById('result-emoji').textContent = skipped ? '⏭️' : '🎯';
+    document.getElementById('result-title').textContent = skipped ? 'Runde hoppet over' : 'Riktig!';
+    document.getElementById('result-sub').textContent = skipped
+      ? hotSeatName + ' mistet tilkoblingen.'
+      : hotSeatName + ' fikk kategorien!';
     document.getElementById('result-category').textContent = category;
     document.getElementById('hotseat-score-meta').textContent =
       'Runde ' + roundNumber + ' av ' + totalRounds + ' · ' + wordCount + ' ord brukt · +' + pointsAwarded + ' poeng (totalt ' + totalScore + ')';
@@ -2505,6 +2513,8 @@
     document.getElementById('hsd-answer-counter').textContent = '0/180';
     document.getElementById('hsd-submit-answer-btn').disabled = true;
     document.getElementById('hsd-submit-answer-btn').style.display = 'block';
+    document.getElementById('hsd-answer-waiting').innerHTML =
+      'sendt inn · venter på andre<div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div>';
     document.getElementById('hsd-answer-waiting').style.display = 'none';
     document.getElementById('hsd-answer-progress').textContent = 'Runde ' + hsdCurrentRound + '/' + hsdTotalRounds + ' · 0/' + total + ' svart';
     showScreen('screen-hsd-answering');
@@ -2521,6 +2531,8 @@
     hsdMyVotes = new Array(answers.length).fill(null);
     renderHsdVotingScreen();
     document.getElementById('hsd-vote-next-btn').style.display = 'block';
+    document.getElementById('hsd-vote-waiting').innerHTML =
+      'stemmer sendt · venter på andre<div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div>';
     document.getElementById('hsd-vote-waiting').style.display = 'none';
     showScreen('screen-hsd-voting');
   });
@@ -2532,25 +2544,33 @@
     }
   });
 
-  socket.on('hsd_answer_restored', () => {
+  socket.on('hsd_answer_restored', ({ message } = {}) => {
     const input = document.getElementById('hsd-answer-input');
     input.disabled = true;
     document.getElementById('hsd-submit-answer-btn').style.display = 'none';
-    document.getElementById('hsd-answer-waiting').style.display = 'block';
+    const waiting = document.getElementById('hsd-answer-waiting');
+    waiting.innerHTML = escapeHtml(message || 'sendt inn · venter på andre') +
+      '<div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div>';
+    waiting.style.display = 'block';
   });
 
-  socket.on('hsd_vote_restored', ({ votes } = {}) => {
-    if (!Array.isArray(votes) || votes.length === 0) return;
-    hsdMyVotes = votes.slice();
-    hsdVoteIdx = Math.max(0, votes.length - 1);
+  socket.on('hsd_vote_restored', ({ votes, message } = {}) => {
+    if (Array.isArray(votes) && votes.length > 0) {
+      hsdMyVotes = votes.slice();
+      hsdVoteIdx = Math.max(0, votes.length - 1);
+    }
     document.getElementById('hsd-vote-next-btn').style.display = 'none';
-    document.getElementById('hsd-vote-waiting').style.display = 'block';
+    const waiting = document.getElementById('hsd-vote-waiting');
+    waiting.innerHTML = escapeHtml(message || 'stemmer sendt · venter på andre') +
+      '<div class="tdots"><div class="tdot"></div><div class="tdot"></div><div class="tdot"></div></div>';
+    waiting.style.display = 'block';
   });
 
   socket.on('hsd_reveal', ({ answers, players, myCorrect, total, myTotalScore, roundNumber, totalRounds, isHost: hostId }) => {
     document.getElementById('hsd-score-big').innerHTML = myCorrect + ' <span class="av-sub">av</span> ' + total;
     const hand = document.getElementById('hsd-score-hand');
-    if (myCorrect === total) hand.textContent = 'detektivarbeid!';
+    if (total === 0) hand.textContent = 'ingen gjetninger denne runden';
+    else if (myCorrect === total) hand.textContent = 'detektivarbeid!';
     else if (myCorrect >= Math.ceil(total / 2)) hand.textContent = 'ikke verst…';
     else hand.textContent = 'kjente du dem i det hele tatt?';
     document.getElementById('hsd-round-meta').textContent =
@@ -2559,17 +2579,18 @@
     const list = document.getElementById('hsd-reveal-list');
     list.innerHTML = '';
     answers.forEach((a, i) => {
-      const author = players[a.authorIdx] || { name: '?' };
-      const guess = (a.guessIdx != null) ? players[a.guessIdx] : null;
-      const correct = (a.guessIdx === a.authorIdx);
+      const author = players.find((p) => p.id === a.authorId) || players[a.authorIdx] || { name: '?' };
+      const guessId = a.guessId !== undefined ? a.guessId : (a.guessIdx != null && players[a.guessIdx] ? players[a.guessIdx].id : null);
+      const guess = guessId ? players.find((p) => p.id === guessId) : null;
+      const correct = !a.isMine && guessId === a.authorId;
       const rot = ((i % 2 === 0) ? -1 : 1) * (1.2 + (i % 3) * 0.4);
-      const color = PAPER_COLORS[a.authorIdx % PAPER_COLORS.length];
+      const color = PAPER_COLORS[(author.idx ?? a.authorIdx ?? i) % PAPER_COLORS.length];
       const initials = author.name.split(' ').map(s => s[0] || '').slice(0,2).join('').toUpperCase();
       const card = document.createElement('div');
       card.style.position = 'relative';
       card.innerHTML =
-        '<div class="reveal-stamp ' + (correct ? 'correct' : 'wrong') + '">' +
-          (correct ? 'riktig!' : 'feil!') +
+        '<div class="reveal-stamp ' + (a.isMine ? 'correct' : (correct ? 'correct' : 'wrong')) + '">' +
+          (a.isMine ? 'ditt!' : (correct ? 'riktig!' : 'feil!')) +
         '</div>' +
         '<div class="reveal-card" style="transform:rotate(' + rot + 'deg)">' +
           '<div class="paper-noise"></div>' +
@@ -2583,7 +2604,9 @@
                 '<div class="rv-author-name">' + escapeHtml(author.name) + '</div>' +
               '</div>' +
             '</div>' +
-            (guess ? (
+            (a.isMine ? (
+              '<div class="rv-guess correct">ditt svar<br><span>hoppet over</span></div>'
+            ) : guess ? (
               '<div class="rv-guess ' + (correct ? 'correct' : 'wrong') + '">din gjetning<br><span>' + escapeHtml(guess.name) + '</span></div>'
             ) : '<div class="rv-guess"></div>') +
           '</div>' +
@@ -2619,16 +2642,16 @@
     showScreen('screen-msl-voting');
   });
 
-  socket.on('msl_vote_count', ({ count, total }) => {
+  socket.on('msl_vote_count', ({ count, total, voters }) => {
     document.getElementById('msl-waiting-counter').textContent = count + '/' + total;
     document.getElementById('msl-waiting-text').textContent = count + ' av ' + total + ' har stemt';
     document.getElementById('msl-waiting-remaining').textContent = (total - count) + ' igjen';
 
-    // Render player strip with check marks for voters we know about
     const strip = document.getElementById('msl-waiting-strip');
     strip.innerHTML = '';
+    const voterIds = Array.isArray(voters) ? voters : [];
     mslPlayers.forEach((p, i) => {
-      const hasVoted = i < count; // server doesn't tell us who voted; show progressively
+      const hasVoted = voterIds.length ? voterIds.includes(p.id) : i < count;
       const cell = document.createElement('div');
       cell.className = 'pcell';
       cell.innerHTML = mlAvatarHTML(p, 36, { dim: !hasVoted }) +
@@ -2637,32 +2660,36 @@
     });
   });
 
-  socket.on('msl_vote_restored', ({ votedFor }) => {
-    if (!votedFor) return;
+  socket.on('msl_vote_restored', ({ votedFor, message } = {}) => {
     mslSelectedVote = votedFor;
     document.getElementById('msl-vote-btn').disabled = true;
-    document.getElementById('msl-vote-btn').textContent = 'Stemt!';
+    document.getElementById('msl-vote-btn').textContent = votedFor ? 'Stemt!' : 'Venter';
     showScreen('screen-msl-waiting');
     document.getElementById('msl-wait-statement').textContent = '…' + mslStatement + '.';
     document.getElementById('msl-wait-round-label').textContent = 'Runde ' + mslCurrentRound + '/' + mslTotalRounds;
+    if (message) document.getElementById('msl-waiting-text').textContent = message;
   });
 
   socket.on('msl_results', ({ statement, players, winners, isTie, totalVotes, myDelta, myTotalScore, roundNumber, totalRounds, isHost: hostId }) => {
     document.getElementById('msl-results-round-label').textContent = 'Runde ' + roundNumber + '/' + totalRounds;
 
-    // Winner is the first one in winners array (or top by votes)
-    const winnerId = winners[0];
-    const winner = players.find((p) => p.id === winnerId) || players[0];
+    const noVotes = !Array.isArray(winners) || winners.length === 0;
+    const winnerId = noVotes ? null : winners[0];
+    const winner = players.find((p) => p.id === winnerId) || players[0] || { name: 'Ingen', idx: 0, votes: 0 };
     const me = players.find((p) => p.name === myName);
 
     const winnerAvatarHost = document.getElementById('msl-winner-avatar');
     winnerAvatarHost.innerHTML = mlAvatarHTML(winner, 72, { ring: true });
 
-    const winnerTagText = isTie
+    const winnerTagText = noVotes
+      ? 'Ingen stemmer'
+      : isTie
       ? 'Uavgjort!'
       : (winner.name === myName ? 'Det ble deg!' : 'Det ble ' + winner.name);
     document.getElementById('msl-winner-tag-text').textContent = winnerTagText;
-    document.getElementById('msl-winner-name').textContent = isTie
+    document.getElementById('msl-winner-name').textContent = noVotes
+      ? 'Ingen rundevinner'
+      : isTie
       ? winners.map((id) => (players.find((p) => p.id === id) || {}).name).filter(Boolean).join(' & ')
       : winner.name;
     document.getElementById('msl-winner-meta').textContent = winner.votes + ' av ' + totalVotes + ' stemmer';
@@ -2807,6 +2834,8 @@
 
     // current answer
     const cur = hsdAnswers[hsdVoteIdx];
+    const isMine = !!cur.isMine;
+    if (isMine) hsdMyVotes[hsdVoteIdx] = null;
     const rot = ((hsdVoteIdx % 2 === 0) ? -1 : 1) * (1.2 + (hsdVoteIdx % 3) * 0.4);
     const slot = document.getElementById('hsd-answer-slot');
     slot.innerHTML =
@@ -2821,27 +2850,34 @@
     const picked = hsdMyVotes[hsdVoteIdx];
     const grid = document.getElementById('hsd-vote-grid');
     grid.innerHTML = '';
-    hsdPlayers.forEach((p, i) => {
+    if (isMine) {
+      const own = document.createElement('div');
+      own.className = 'pending-box';
+      own.textContent = 'ditt svar · hopper over';
+      grid.appendChild(own);
+    }
+    if (!isMine) hsdPlayers.forEach((p, i) => {
+      if (p.name === myName) return;
       const color = PAPER_COLORS[p.idx % PAPER_COLORS.length];
       const initials = p.name.split(' ').map(s => s[0] || '').slice(0,2).join('').toUpperCase();
       const cell = document.createElement('div');
       cell.className = 'avatar-cell' +
-        (picked === p.idx ? ' selected' : '') +
-        (picked != null && picked !== p.idx ? ' dim' : '');
+        (picked === p.id ? ' selected' : '') +
+        (picked != null && picked !== p.id ? ' dim' : '');
       cell.innerHTML =
         '<div class="av" style="background:' + color + '">' + escapeHtml(initials) + '</div>' +
         '<div class="av-name">' + escapeHtml(p.name) + '</div>';
-      cell.onclick = () => { hsdMyVotes[hsdVoteIdx] = p.idx; renderHsdVotingScreen(); };
+      cell.onclick = () => { hsdMyVotes[hsdVoteIdx] = p.id; renderHsdVotingScreen(); };
       grid.appendChild(cell);
     });
 
     const nextBtn = document.getElementById('hsd-vote-next-btn');
-    nextBtn.disabled = (picked == null);
+    nextBtn.disabled = (!isMine && picked == null);
     nextBtn.textContent = (hsdVoteIdx + 1 < hsdAnswers.length) ? 'Neste svar →' : 'Send inn gjetninger →';
   }
 
   function hsdVoteNext() {
-    if (hsdMyVotes[hsdVoteIdx] == null) return;
+    if (!hsdAnswers[hsdVoteIdx]?.isMine && hsdMyVotes[hsdVoteIdx] == null) return;
     if (hsdVoteIdx + 1 < hsdAnswers.length) {
       hsdVoteIdx++;
       renderHsdVotingScreen();

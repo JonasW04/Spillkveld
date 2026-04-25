@@ -16,7 +16,8 @@ const io = new Server(server, {
 app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
-const RECONNECT_GRACE_MS = 60 * 1000;
+const RECONNECT_GRACE_MS = 90 * 1000;
+const MAX_MSL_PLAYERS = 8;
 
 const CATEGORIES = [
   "Ting du kan holde i en hånd", "Ting du har plass til i munnen", "Ting som lager rar lyd",
@@ -167,6 +168,16 @@ function generateCode() {
   return Math.random().toString(36).substring(2, 6).toUpperCase();
 }
 
+function generateUniqueCode() {
+  let code = generateCode();
+  while (rooms[code]) code = generateCode();
+  return code;
+}
+
+function cleanName(name) {
+  return String(name || '').trim().replace(/\s+/g, ' ').slice(0, 20);
+}
+
 function getLocalIP() {
   const nets = os.networkInterfaces();
   for (const name of Object.keys(nets)) {
@@ -203,7 +214,15 @@ function moveVoteKeys(votes, fromId, toId) {
   }
   Object.keys(votes).forEach((voterId) => {
     if (votes[voterId] === fromId) votes[voterId] = toId;
+    if (Array.isArray(votes[voterId])) {
+      votes[voterId] = votes[voterId].map((vote) => (vote === fromId ? toId : vote));
+    }
   });
+}
+
+function replaceIdInArray(arr, fromId, toId) {
+  if (!Array.isArray(arr) || fromId === toId) return arr;
+  return arr.map((id) => (id === fromId ? toId : id));
 }
 
 function migratePlayerReferences(room, fromId, toId) {
@@ -214,6 +233,8 @@ function migratePlayerReferences(room, fromId, toId) {
   room.hotSeatOrder = room.hotSeatOrder.map((id) => (id === fromId ? toId : id));
   if (room.currentRound) {
     if (room.currentRound.hotSeatId === fromId) room.currentRound.hotSeatId = toId;
+    room.currentRound.answerPlayerIds = replaceIdInArray(room.currentRound.answerPlayerIds, fromId, toId);
+    room.currentRound.votingPlayerIds = replaceIdInArray(room.currentRound.votingPlayerIds, fromId, toId);
     if (Array.isArray(room.currentRound.answers)) {
       room.currentRound.answers.forEach((a) => {
         if (a.playerId === fromId) a.playerId = toId;
@@ -286,7 +307,7 @@ function restoreRemovedPlayer({ room, token, name, socketId }) {
   if (name && String(removed.name).toLowerCase() !== String(name).toLowerCase()) return null;
   if (room.players.find((p) => p.name.toLowerCase() === removed.name.toLowerCase())) return null;
 
-  const player = { id: socketId, name: removed.name, token, connected: true, removalTimeout: null };
+  const player = { id: socketId, name: removed.name, token, connected: true, paused: false, removalTimeout: null };
   room.players.push(player);
   room.hsdScores[socketId] = removed.hsdScore || 0;
   room.hotSeatScores[socketId] = removed.hotSeatScore || 0;
@@ -318,6 +339,15 @@ function schedulePlayerRemoval(code, token) {
     const latestPlayer = findPlayerByToken(latestRoom, token);
     if (!latestPlayer || latestPlayer.connected) return;
     const removedId = latestPlayer.id;
+
+    if (latestRoom.state !== 'lobby') {
+      latestPlayer.paused = true;
+      markPlayerInactiveForCurrentPhase(code, removedId);
+      transferHostIfNeeded(code);
+      emitLobbyUpdate(code);
+      return;
+    }
+
     const remainingHotSeatTurns = latestRoom.hotSeatOrder
       .slice(latestRoom.hotSeatOrderIdx)
       .filter((id) => id === removedId).length;
@@ -354,6 +384,56 @@ function schedulePlayerRemoval(code, token) {
   }, RECONNECT_GRACE_MS);
 }
 
+function markPlayerInactiveForCurrentPhase(code, playerId) {
+  const room = rooms[code];
+  if (!room || !room.currentRound || !playerId) return;
+
+  if (room.gameType === 'hvem-sendte-det') {
+    if (room.state === 'answering') {
+      const hasAnswered = room.currentRound.answers.some((a) => a.playerId === playerId);
+      if (!hasAnswered) {
+        room.currentRound.answerPlayerIds = getExpectedIds(room, 'answerPlayerIds').filter((id) => id !== playerId);
+      }
+      emitHsdAnswerCount(code);
+      const total = getExpectedIds(room, 'answerPlayerIds').length;
+      if (total > 0 && getSubmittedAnswerCount(room) >= total) {
+        setTimeout(() => startVoting(code), 300);
+      }
+      return;
+    }
+
+    if (room.state === 'voting') {
+      if (!room.currentRound.votes[playerId]) {
+        room.currentRound.votingPlayerIds = getExpectedIds(room, 'votingPlayerIds').filter((id) => id !== playerId);
+      }
+      emitHsdVoteCount(code);
+      const total = getExpectedIds(room, 'votingPlayerIds').length;
+      if (total > 0 && getSubmittedVoteCount(room) >= total) {
+        setTimeout(() => showHsdResults(code), 300);
+      }
+      return;
+    }
+  }
+
+  if (room.gameType === 'msl' && room.state === 'msl-voting') {
+    if (!room.currentRound.votes[playerId]) {
+      room.currentRound.votingPlayerIds = getExpectedIds(room, 'votingPlayerIds').filter((id) => id !== playerId);
+    }
+    emitMslVoteCount(code);
+    const total = getExpectedIds(room, 'votingPlayerIds').length;
+    if (total > 0 && getSubmittedVoteCount(room) >= total) {
+      setTimeout(() => showMslResults(code), 300);
+    }
+    return;
+  }
+
+  if (room.gameType === 'hotseat' && room.state === 'playing' && room.currentRound.hotSeatId === playerId) {
+    room.hotSeatOrder = room.hotSeatOrder.filter((id, idx) => idx < room.hotSeatOrderIdx || id !== playerId);
+    room.hotSeatTotalRounds = Math.max(room.hotSeatRoundNumber, room.hotSeatOrder.length);
+    skipHotSeatRound(code);
+  }
+}
+
 function clearPlayerRemoval(player) {
   if (!player || !player.removalTimeout) return;
   clearTimeout(player.removalTimeout);
@@ -367,6 +447,7 @@ function emitLobbyUpdate(code) {
     id: p.id,
     name: p.name,
     connected: p.connected ?? true,
+    paused: p.paused ?? false,
   }));
 
   if (room.gameType === 'hvem-sendte-det') {
@@ -387,7 +468,7 @@ function emitLobbyUpdate(code) {
     return;
   }
 
-  const hotSeatTotalRounds = room.players.length * room.hotSeatGuessesPerPlayer;
+  const hotSeatTotalRounds = room.players.filter((p) => p.connected).length * room.hotSeatGuessesPerPlayer;
   io.to(code).emit('lobby_update', {
     players: publicPlayers,
     gameType: room.gameType,
@@ -432,6 +513,98 @@ function getMslLeaderboard(room) {
     });
 }
 
+function getPlayerIdx(room, playerId) {
+  return room.players.findIndex((p) => p.id === playerId);
+}
+
+function getHsdPlayersPayload(room) {
+  const authorIds = new Set((room.currentRound?.shuffled || room.currentRound?.answers || []).map((a) => a.playerId));
+  return room.players
+    .map((p, i) => ({ id: p.id, name: p.name, idx: i }))
+    .filter((p) => authorIds.has(p.id));
+}
+
+function emitHsdVotingStart(player, room) {
+  if (!player || !room || !room.currentRound || !Array.isArray(room.currentRound.shuffled)) return;
+  io.to(player.id).emit('hsd_voting_start', {
+    answers: room.currentRound.shuffled.map((answer) => ({
+      text: answer.text,
+      isMine: answer.playerId === player.id,
+    })),
+    players: getHsdPlayersPayload(room).filter((candidate) => candidate.id !== player.id),
+  });
+}
+
+function getExpectedIds(room, key) {
+  if (!room || !room.currentRound) return [];
+  if (Array.isArray(room.currentRound[key])) return room.currentRound[key];
+  return room.players.map((p) => p.id);
+}
+
+function getSubmittedVoteCount(room) {
+  const expected = new Set(getExpectedIds(room, 'votingPlayerIds'));
+  if (!room || !room.currentRound || !room.currentRound.votes) return 0;
+  return Object.keys(room.currentRound.votes).filter((id) => expected.has(id)).length;
+}
+
+function getSubmittedAnswerCount(room) {
+  const expected = new Set(getExpectedIds(room, 'answerPlayerIds'));
+  if (!room || !room.currentRound || !Array.isArray(room.currentRound.answers)) return 0;
+  return room.currentRound.answers.filter((answer) => expected.has(answer.playerId)).length;
+}
+
+function emitHsdAnswerCount(code) {
+  const room = rooms[code];
+  if (!room || !room.currentRound) return;
+  io.to(code).emit('hsd_answer_count', {
+    count: getSubmittedAnswerCount(room),
+    total: getExpectedIds(room, 'answerPlayerIds').length,
+  });
+}
+
+function emitHsdVoteCount(code) {
+  const room = rooms[code];
+  if (!room || !room.currentRound) return;
+  io.to(code).emit('hsd_vote_count', {
+    count: getSubmittedVoteCount(room),
+    total: getExpectedIds(room, 'votingPlayerIds').length,
+  });
+}
+
+function emitMslVoteCount(code) {
+  const room = rooms[code];
+  if (!room || !room.currentRound) return;
+  const expected = new Set(getExpectedIds(room, 'votingPlayerIds'));
+  const voters = Object.keys(room.currentRound.votes || {}).filter((id) => expected.has(id));
+  io.to(code).emit('msl_vote_count', {
+    count: voters.length,
+    total: expected.size,
+    voters,
+  });
+}
+
+function emitStateToConnectedPlayers(code) {
+  const room = rooms[code];
+  if (!room) return;
+  room.players.forEach((player) => {
+    if (!player.connected) return;
+    const playerSocket = io.sockets.sockets.get(player.id);
+    if (playerSocket) emitResumeState(playerSocket, room);
+  });
+}
+
+function transferHostIfNeeded(code) {
+  const room = rooms[code];
+  if (!room) return false;
+  const host = room.players.find((p) => p.id === room.host);
+  if (host && host.connected) return false;
+  const nextHost = room.players.find((p) => p.connected);
+  if (!nextHost) return false;
+  room.host = nextHost.id;
+  emitStateToConnectedPlayers(code);
+  return true;
+}
+
 function emitResumeState(socket, room) {
   if (!room) return;
   const me = room.players.find((p) => p.id === socket.id);
@@ -459,7 +632,7 @@ function emitResumeState(socket, room) {
       return;
     }
     if (room.state === 'round_end' && room.currentRound) {
-      const pointsAwarded = Math.max(1, 20 - (room.currentRound.wordCount || 0));
+      const pointsAwarded = room.currentRound.skipped ? 0 : Math.max(1, 20 - (room.currentRound.wordCount || 0));
       socket.emit('round_end', {
         category: room.currentRound.category,
         hotSeatName: room.currentRound.hotSeatName,
@@ -469,6 +642,7 @@ function emitResumeState(socket, room) {
         roundNumber: room.hotSeatRoundNumber,
         totalRounds: room.hotSeatTotalRounds,
         isHost: room.host,
+        skipped: !!room.currentRound.skipped,
       });
       return;
     }
@@ -483,52 +657,61 @@ function emitResumeState(socket, room) {
 
   if (room.gameType === 'hvem-sendte-det') {
     if (room.state === 'answering' && room.currentRound) {
+      const expectedAnswerers = getExpectedIds(room, 'answerPlayerIds');
       socket.emit('hsd_round_start', {
         question: room.currentRound.question,
-        total: room.players.length,
+        total: expectedAnswerers.length,
         roundNumber: room.hsdRoundNumber,
         totalRounds: room.selectedRounds,
       });
       socket.emit('hsd_answer_count', {
-        count: room.currentRound.answers.length,
-        total: room.players.length,
+        count: getSubmittedAnswerCount(room),
+        total: expectedAnswerers.length,
       });
       const hasAnswered = room.currentRound.answers.some((a) => a.playerId === socket.id);
-      if (hasAnswered) socket.emit('hsd_answer_restored');
+      if (hasAnswered || !expectedAnswerers.includes(socket.id)) {
+        socket.emit('hsd_answer_restored', {
+          message: hasAnswered ? 'sendt inn · venter på andre' : 'du er med igjen · venter på neste steg',
+        });
+      }
       return;
     }
     if (room.state === 'voting' && room.currentRound && Array.isArray(room.currentRound.shuffled)) {
-      socket.emit('hsd_voting_start', {
-        answers: room.currentRound.shuffled.map((a) => ({ text: a.text })),
-        players: room.players.map((p, i) => ({ name: p.name, idx: i })),
-      });
+      emitHsdVotingStart(me, room);
       const votes = room.currentRound.votes[socket.id];
       if (Array.isArray(votes) && votes.length) {
         socket.emit('hsd_vote_restored', { votes });
+      } else if (!getExpectedIds(room, 'votingPlayerIds').includes(socket.id)) {
+        socket.emit('hsd_vote_restored', { votes: [], message: 'du er med igjen · venter på resultatet' });
       }
       socket.emit('hsd_vote_count', {
-        count: Object.keys(room.currentRound.votes).length,
-        total: room.players.length,
+        count: getSubmittedVoteCount(room),
+        total: getExpectedIds(room, 'votingPlayerIds').length,
       });
       return;
     }
     if (room.state === 'reveal' && room.currentRound && Array.isArray(room.currentRound.shuffled)) {
-      const playersPayload = room.players.map((p, i) => ({ name: p.name, idx: i }));
+      const playersPayload = getHsdPlayersPayload(room);
       const myVotes = room.currentRound.votes[socket.id] || [];
       let correct = 0;
+      let total = 0;
       room.currentRound.shuffled.forEach((ans, i) => {
-        if (myVotes[i] === ans.playerIdx) correct++;
+        if (ans.playerId === socket.id) return;
+        total++;
+        if (myVotes[i] === ans.playerId) correct++;
       });
       socket.emit('hsd_reveal', {
         answers: room.currentRound.shuffled.map((a, i) => ({
           text: a.text,
-          authorIdx: a.playerIdx,
+          authorId: a.playerId,
+          authorIdx: getPlayerIdx(room, a.playerId),
           authorName: a.playerName,
-          guessIdx: myVotes[i] ?? null,
+          guessId: myVotes[i] ?? null,
+          isMine: a.playerId === socket.id,
         })),
         players: playersPayload,
         myCorrect: correct,
-        total: room.currentRound.shuffled.length,
+        total,
         myTotalScore: room.hsdScores[socket.id] || 0,
         roundNumber: room.hsdRoundNumber,
         totalRounds: room.selectedRounds,
@@ -558,19 +741,27 @@ function emitResumeState(socket, room) {
         roundNumber: room.mslRoundNumber,
         totalRounds: room.mslRounds,
       });
+      const expectedVoters = getExpectedIds(room, 'votingPlayerIds');
+      const voters = Object.keys(room.currentRound.votes || {}).filter((id) => expectedVoters.includes(id));
       socket.emit('msl_vote_count', {
-        count: Object.keys(room.currentRound.votes).length,
-        total: room.players.length,
+        count: voters.length,
+        total: expectedVoters.length,
+        voters,
       });
       const myVote = room.currentRound.votes[socket.id];
       if (myVote) socket.emit('msl_vote_restored', { votedFor: myVote });
+      else if (!expectedVoters.includes(socket.id)) {
+        socket.emit('msl_vote_restored', { votedFor: null, message: 'du er med igjen · venter på resultatet' });
+      }
       return;
     }
     if (room.state === 'msl-reveal' && room.currentRound) {
       const votes = room.currentRound.votes || {};
+      const expected = new Set(getExpectedIds(room, 'votingPlayerIds'));
+      const validVoteEntries = Object.entries(votes).filter(([voterId]) => expected.has(voterId));
       const counts = {};
       room.players.forEach((p) => { counts[p.id] = 0; });
-      Object.values(votes).forEach((votedId) => {
+      validVoteEntries.map(([, votedId]) => votedId).forEach((votedId) => {
         if (counts[votedId] !== undefined) counts[votedId] += 1;
       });
       let maxVotes = 0;
@@ -582,7 +773,7 @@ function emitResumeState(socket, room) {
       const deltas = {};
       room.players.forEach((p) => { deltas[p.id] = 0; });
       if (winners.length > 0) {
-        Object.entries(votes).forEach(([voterId, votedId]) => {
+        validVoteEntries.forEach(([voterId, votedId]) => {
           if (winners.includes(votedId)) deltas[voterId] = isTie ? 1 : 2;
         });
       }
@@ -623,7 +814,10 @@ function startHotSeatRound(code) {
   if (!room) return;
 
   const totalRounds = room.hotSeatTotalRounds;
-  if (!totalRounds || room.hotSeatRoundNumber > totalRounds) return;
+  if (!totalRounds || room.hotSeatRoundNumber > totalRounds) {
+    showHotSeatLeaderboard(code);
+    return;
+  }
 
   const hotSeatId = room.hotSeatOrder[room.hotSeatOrderIdx++];
   if (!hotSeatId) {
@@ -631,7 +825,8 @@ function startHotSeatRound(code) {
     return;
   }
   const hotSeat = room.players.find((p) => p.id === hotSeatId);
-  if (!hotSeat) {
+  if (!hotSeat || hotSeat.paused) {
+    room.hotSeatRoundNumber += 1;
     startHotSeatRound(code);
     return;
   }
@@ -667,6 +862,36 @@ function startHotSeatRound(code) {
   });
 }
 
+function finishHotSeatRound(code, options = {}) {
+  const room = rooms[code];
+  if (!room || !room.currentRound || room.gameType !== 'hotseat' || room.state !== 'playing') return;
+
+  const skipped = !!options.skipped;
+  const pointsAwarded = skipped ? 0 : Math.max(1, 20 - room.currentRound.wordCount);
+  room.currentRound.skipped = skipped;
+  if (!skipped) {
+    room.hotSeatScores[room.currentRound.hotSeatId] =
+      (room.hotSeatScores[room.currentRound.hotSeatId] || 0) + pointsAwarded;
+  }
+  room.state = 'round_end';
+
+  io.to(code).emit('round_end', {
+    category: room.currentRound.category,
+    hotSeatName: room.currentRound.hotSeatName,
+    wordCount: room.currentRound.wordCount,
+    pointsAwarded,
+    totalScore: room.hotSeatScores[room.currentRound.hotSeatId] || 0,
+    roundNumber: room.hotSeatRoundNumber,
+    totalRounds: room.hotSeatTotalRounds,
+    isHost: room.host,
+    skipped,
+  });
+}
+
+function skipHotSeatRound(code) {
+  finishHotSeatRound(code, { skipped: true });
+}
+
 function showHotSeatLeaderboard(code) {
   const room = rooms[code];
   if (!room) return;
@@ -695,18 +920,23 @@ function startAnsweringRound(code) {
   if (!room) return;
 
   const question = QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)];
+  const answerPlayerIds = room.players.filter((p) => !p.paused).map((p) => p.id);
+  if (answerPlayerIds.length === 0) return;
   room.currentRound = {
     question,
     answers: [],
     votes: {},
     shuffled: null,
+    answerPlayerIds,
+    votingPlayerIds: [],
+    scored: false,
     roundNumber: room.hsdRoundNumber,
   };
   room.state = 'answering';
 
   io.to(code).emit('hsd_round_start', {
     question,
-    total: room.players.length,
+    total: answerPlayerIds.length,
     roundNumber: room.hsdRoundNumber,
     totalRounds: room.selectedRounds,
   });
@@ -714,52 +944,68 @@ function startAnsweringRound(code) {
 
 function startVoting(code) {
   const room = rooms[code];
-  if (!room) return;
+  if (!room || room.gameType !== 'hvem-sendte-det' || room.state !== 'answering' || !room.currentRound) return;
 
-  const shuffled = [...room.currentRound.answers].sort(() => Math.random() - 0.5);
-  room.currentRound.shuffled = shuffled;
+  const expected = new Set(getExpectedIds(room, 'answerPlayerIds'));
+  const answers = room.currentRound.answers.filter((answer) => expected.has(answer.playerId));
+  const shuffledAnswers = shuffled(answers);
+  room.currentRound.shuffled = shuffledAnswers;
+  room.currentRound.votingPlayerIds = room.players.filter((p) => !p.paused).map((p) => p.id);
   room.state = 'voting';
 
-  const playersPayload = room.players.map((p, i) => ({ name: p.name, idx: i }));
+  if (shuffledAnswers.length < 2 || room.currentRound.votingPlayerIds.length === 0) {
+    showHsdResults(code);
+    return;
+  }
 
-  io.to(code).emit('hsd_voting_start', {
-    answers: shuffled.map(a => ({ text: a.text })),
-    players: playersPayload,
+  room.players.forEach((player) => {
+    if (!player.connected) return;
+    emitHsdVotingStart(player, room);
   });
+  emitHsdVoteCount(code);
 }
 
 function showHsdResults(code) {
   const room = rooms[code];
-  if (!room) return;
+  if (!room || !room.currentRound || !Array.isArray(room.currentRound.shuffled)) return;
+  if (room.state === 'reveal' || room.state === 'game_over') return;
 
   const shuffled = room.currentRound.shuffled;
   room.state = 'reveal';
 
-  const playersPayload = room.players.map((p, i) => ({ name: p.name, idx: i }));
+  const playersPayload = getHsdPlayersPayload(room);
 
   room.players.forEach(p => {
     const myVotes = room.currentRound.votes[p.id] || [];
     let correct = 0;
+    let total = 0;
     shuffled.forEach((ans, i) => {
-      if (myVotes[i] === ans.playerIdx) correct++;
+      if (ans.playerId === p.id) return;
+      total++;
+      if (myVotes[i] === ans.playerId) correct++;
     });
-    room.hsdScores[p.id] = (room.hsdScores[p.id] || 0) + correct;
+    if (!room.currentRound.scored) {
+      room.hsdScores[p.id] = (room.hsdScores[p.id] || 0) + correct;
+    }
     io.to(p.id).emit('hsd_reveal', {
       answers: shuffled.map((a, i) => ({
         text: a.text,
-        authorIdx: a.playerIdx,
+        authorId: a.playerId,
+        authorIdx: getPlayerIdx(room, a.playerId),
         authorName: a.playerName,
-        guessIdx: myVotes[i] ?? null,
+        guessId: myVotes[i] ?? null,
+        isMine: a.playerId === p.id,
       })),
       players: playersPayload,
       myCorrect: correct,
-      total: shuffled.length,
+      total,
       myTotalScore: room.hsdScores[p.id] || 0,
       roundNumber: room.hsdRoundNumber,
       totalRounds: room.selectedRounds,
       isHost: room.host,
     });
   });
+  room.currentRound.scored = true;
 }
 
 function showHsdLeaderboard(code) {
@@ -788,6 +1034,8 @@ function showHsdLeaderboard(code) {
 function startMslRound(code) {
   const room = rooms[code];
   if (!room) return;
+  const votingPlayerIds = room.players.filter((p) => !p.paused).map((p) => p.id);
+  if (votingPlayerIds.length === 0) return;
 
   if (!room.mslStatementPool || room.mslStatementPool.length === 0) {
     room.mslStatementPool = shuffled(MSL_STATEMENTS);
@@ -797,6 +1045,8 @@ function startMslRound(code) {
   room.currentRound = {
     statement,
     votes: {}, // { voterId: votedForId }
+    votingPlayerIds,
+    scored: false,
     roundNumber: room.mslRoundNumber,
   };
   room.state = 'msl-voting';
@@ -817,12 +1067,15 @@ function startMslRound(code) {
 
 function showMslResults(code) {
   const room = rooms[code];
-  if (!room) return;
+  if (!room || !room.currentRound) return;
+  if (room.state === 'msl-reveal' || room.state === 'game_over') return;
 
   const votes = room.currentRound.votes;
+  const expected = new Set(getExpectedIds(room, 'votingPlayerIds'));
+  const validVoteEntries = Object.entries(votes).filter(([voterId]) => expected.has(voterId));
   const counts = {};
   room.players.forEach((p) => { counts[p.id] = 0; });
-  Object.values(votes).forEach((votedId) => {
+  validVoteEntries.map(([, votedId]) => votedId).forEach((votedId) => {
     if (counts[votedId] !== undefined) counts[votedId] += 1;
   });
 
@@ -838,7 +1091,7 @@ function showMslResults(code) {
   const deltas = {};
   room.players.forEach((p) => { deltas[p.id] = 0; });
   if (winners.length > 0) {
-    Object.entries(votes).forEach(([voterId, votedId]) => {
+    validVoteEntries.forEach(([voterId, votedId]) => {
       if (winners.includes(votedId)) {
         deltas[voterId] = isTie ? 1 : 2;
       }
@@ -847,8 +1100,11 @@ function showMslResults(code) {
   }
 
   room.players.forEach((p) => {
-    room.mslScores[p.id] = (room.mslScores[p.id] || 0) + (deltas[p.id] || 0);
+    if (!room.currentRound.scored) {
+      room.mslScores[p.id] = (room.mslScores[p.id] || 0) + (deltas[p.id] || 0);
+    }
   });
+  room.currentRound.scored = true;
 
   room.state = 'msl-reveal';
 
@@ -905,13 +1161,15 @@ io.on('connection', (socket) => {
   socket.on('create_room', ({ name, gameType, playerToken }) => {
     const token = String(playerToken || '').trim();
     if (!token) return socket.emit('join_error', 'Mangler spiller-økt');
-    const code = generateCode();
+    const cleanPlayerName = cleanName(name);
+    if (!cleanPlayerName) return socket.emit('join_error', 'Skriv inn navnet ditt');
+    const code = generateUniqueCode();
     let selectedGameType = 'hotseat';
     if (gameType === 'hvem-sendte-det') selectedGameType = 'hvem-sendte-det';
     else if (gameType === 'msl') selectedGameType = 'msl';
     rooms[code] = {
       host: socket.id,
-      players: [{ id: socket.id, name, token, connected: true, removalTimeout: null }],
+      players: [{ id: socket.id, name: cleanPlayerName, token, connected: true, paused: false, removalTimeout: null }],
       state: 'lobby',
       currentRound: null,
       lastHotSeat: null,
@@ -944,9 +1202,30 @@ io.on('connection', (socket) => {
     if (!room) return socket.emit('join_error', 'Fant ikke rommet 🤔');
     const token = String(playerToken || '').trim();
     if (!token) return socket.emit('join_error', 'Mangler spiller-økt');
+    const cleanPlayerName = cleanName(name);
+    if (!cleanPlayerName) return socket.emit('join_error', 'Skriv inn navnet ditt');
     const upper = code.toUpperCase();
     if (room.state !== 'lobby') {
-      const restored = restoreRemovedPlayer({ room, token, name, socketId: socket.id });
+      const existing = findPlayerByToken(room, token);
+      if (existing) {
+        if (String(existing.name).toLowerCase() !== cleanPlayerName.toLowerCase()) {
+          return socket.emit('join_error', 'Navnet matcher ikke økten din');
+        }
+        const oldId = existing.id;
+        clearPlayerRemoval(existing);
+        existing.connected = true;
+        existing.paused = false;
+        existing.id = socket.id;
+        socket.playerToken = token;
+        socket.join(upper);
+        socket.roomCode = upper;
+        migratePlayerReferences(room, oldId, socket.id);
+        socket.emit('joined', { code: upper, isHost: room.host === socket.id, name: existing.name, gameType: room.gameType });
+        emitLobbyUpdate(upper);
+        emitStateToConnectedPlayers(upper);
+        return;
+      }
+      const restored = restoreRemovedPlayer({ room, token, name: cleanPlayerName, socketId: socket.id });
       if (!restored) return socket.emit('join_error', 'Spillet er allerede i gang');
       socket.playerToken = token;
       socket.join(upper);
@@ -956,29 +1235,52 @@ io.on('connection', (socket) => {
       emitResumeState(socket, room);
       return;
     }
-    if (room.players.find(p => p.name.toLowerCase() === name.toLowerCase())) {
+    const existingLobbyPlayer = findPlayerByToken(room, token);
+    if (existingLobbyPlayer) {
+      if (String(existingLobbyPlayer.name).toLowerCase() !== cleanPlayerName.toLowerCase()) {
+        return socket.emit('join_error', 'Navnet matcher ikke økten din');
+      }
+      const oldId = existingLobbyPlayer.id;
+      clearPlayerRemoval(existingLobbyPlayer);
+      existingLobbyPlayer.connected = true;
+      existingLobbyPlayer.paused = false;
+      existingLobbyPlayer.id = socket.id;
+      socket.playerToken = token;
+      socket.join(upper);
+      socket.roomCode = upper;
+      migratePlayerReferences(room, oldId, socket.id);
+      socket.emit('joined', { code: upper, isHost: room.host === socket.id, name: existingLobbyPlayer.name, gameType: room.gameType });
+      emitLobbyUpdate(upper);
+      emitStateToConnectedPlayers(upper);
+      return;
+    }
+    if (room.gameType === 'msl' && room.players.length >= MAX_MSL_PLAYERS) {
+      return socket.emit('join_error', `Mest sannsynlig har maks ${MAX_MSL_PLAYERS} spillere`);
+    }
+    if (room.players.find(p => p.name.toLowerCase() === cleanPlayerName.toLowerCase())) {
       return socket.emit('join_error', 'Det er allerede en spiller med det navnet');
     }
-    room.players.push({ id: socket.id, name, token, connected: true, removalTimeout: null });
+    room.players.push({ id: socket.id, name: cleanPlayerName, token, connected: true, paused: false, removalTimeout: null });
     room.hsdScores[socket.id] = room.hsdScores[socket.id] || 0;
     room.hotSeatScores[socket.id] = room.hotSeatScores[socket.id] || 0;
     room.mslScores[socket.id] = room.mslScores[socket.id] || 0;
     socket.playerToken = token;
     socket.join(upper);
     socket.roomCode = upper;
-    socket.emit('joined', { code: upper, isHost: false, name, gameType: room.gameType });
+    socket.emit('joined', { code: upper, isHost: false, name: cleanPlayerName, gameType: room.gameType });
     emitLobbyUpdate(upper);
   });
 
   socket.on('resume_session', ({ code, name, playerToken }) => {
     const upper = String(code || '').toUpperCase();
     const token = String(playerToken || '').trim();
+    const cleanPlayerName = cleanName(name);
     const room = rooms[upper];
     if (!upper || !token || !room) return socket.emit('resume_failed');
 
     const player = findPlayerByToken(room, token);
     if (!player) {
-      const restored = restoreRemovedPlayer({ room, token, name, socketId: socket.id });
+      const restored = restoreRemovedPlayer({ room, token, name: cleanPlayerName, socketId: socket.id });
       if (!restored) return socket.emit('resume_failed');
       socket.playerToken = token;
       socket.roomCode = upper;
@@ -994,7 +1296,7 @@ io.on('connection', (socket) => {
       emitResumeState(socket, room);
       return;
     }
-    if (name && String(player.name).toLowerCase() !== String(name).toLowerCase()) {
+    if (cleanPlayerName && String(player.name).toLowerCase() !== cleanPlayerName.toLowerCase()) {
       return socket.emit('resume_failed');
     }
 
@@ -1006,6 +1308,7 @@ io.on('connection', (socket) => {
 
     clearPlayerRemoval(player);
     player.connected = true;
+    player.paused = false;
     player.id = socket.id;
     socket.playerToken = token;
     socket.roomCode = upper;
@@ -1020,7 +1323,7 @@ io.on('connection', (socket) => {
       state: room.state,
     });
     emitLobbyUpdate(upper);
-    emitResumeState(socket, room);
+    emitStateToConnectedPlayers(upper);
   });
 
   socket.on('set_hotseat_rounds', ({ perPlayerRounds }) => {
@@ -1063,10 +1366,15 @@ io.on('connection', (socket) => {
     const code = socket.roomCode;
     const room = rooms[code];
     if (!room || room.host !== socket.id) return;
+    if (room.state !== 'lobby') return;
     const min = (room.gameType === 'hvem-sendte-det' || room.gameType === 'msl') ? 3 : 2;
-    if (room.players.length < min) {
+    const readyPlayers = room.players.filter((p) => p.connected);
+    if (readyPlayers.length < min) {
       return socket.emit('game_error', `Trenger minst ${min} spillere`);
     }
+    room.players.forEach((p) => {
+      p.paused = !p.connected;
+    });
     if (room.gameType === 'hvem-sendte-det') {
       room.hsdRoundNumber = 1;
       room.hsdScores = {};
@@ -1091,7 +1399,9 @@ io.on('connection', (socket) => {
       });
 
       room.hotSeatOrder = shuffled(
-        room.players.flatMap((p) => Array.from({ length: room.hotSeatGuessesPerPlayer }, () => p.id))
+        room.players
+          .filter((p) => !p.paused)
+          .flatMap((p) => Array.from({ length: room.hotSeatGuessesPerPlayer }, () => p.id))
       );
       room.hotSeatOrderIdx = 0;
       room.hotSeatTotalRounds = room.hotSeatOrder.length;
@@ -1105,6 +1415,7 @@ io.on('connection', (socket) => {
     const room = rooms[code];
     if (!room || room.host !== socket.id) return;
     if (room.gameType === 'hvem-sendte-det') {
+      if (room.state !== 'reveal') return;
       if (room.hsdRoundNumber >= room.selectedRounds) {
         showHsdLeaderboard(code);
         return;
@@ -1112,6 +1423,7 @@ io.on('connection', (socket) => {
       room.hsdRoundNumber += 1;
       startAnsweringRound(code);
     } else if (room.gameType === 'msl') {
+      if (room.state !== 'msl-reveal') return;
       if (room.mslRoundNumber >= room.mslRounds) {
         showMslLeaderboard(code);
         return;
@@ -1119,6 +1431,7 @@ io.on('connection', (socket) => {
       room.mslRoundNumber += 1;
       startMslRound(code);
     } else {
+      if (room.state !== 'round_end') return;
       if (room.hotSeatRoundNumber >= room.hotSeatTotalRounds) {
         showHotSeatLeaderboard(code);
         return;
@@ -1132,7 +1445,7 @@ io.on('connection', (socket) => {
   socket.on('word_said', () => {
     const code = socket.roomCode;
     const room = rooms[code];
-    if (!room || !room.currentRound || room.gameType !== 'hotseat') return;
+    if (!room || !room.currentRound || room.gameType !== 'hotseat' || room.state !== 'playing') return;
     room.currentRound.wordCount++;
     io.to(code).emit('word_count', room.currentRound.wordCount);
   });
@@ -1140,24 +1453,9 @@ io.on('connection', (socket) => {
   socket.on('hotseat_mark_correct', () => {
     const code = socket.roomCode;
     const room = rooms[code];
-    if (!room || !room.currentRound || room.gameType !== 'hotseat') return;
+    if (!room || !room.currentRound || room.gameType !== 'hotseat' || room.state !== 'playing') return;
     if (socket.id !== room.host) return;
-
-    const pointsAwarded = Math.max(1, 20 - room.currentRound.wordCount);
-    room.hotSeatScores[room.currentRound.hotSeatId] =
-      (room.hotSeatScores[room.currentRound.hotSeatId] || 0) + pointsAwarded;
-    room.state = 'round_end';
-
-    io.to(code).emit('round_end', {
-      category: room.currentRound.category,
-      hotSeatName: room.currentRound.hotSeatName,
-      wordCount: room.currentRound.wordCount,
-      pointsAwarded,
-      totalScore: room.hotSeatScores[room.currentRound.hotSeatId] || 0,
-      roundNumber: room.hotSeatRoundNumber,
-      totalRounds: room.hotSeatTotalRounds,
-      isHost: room.host,
-    });
+    finishHotSeatRound(code);
   });
 
   socket.on('hotseat_reroll_category', () => {
@@ -1187,10 +1485,11 @@ io.on('connection', (socket) => {
     if (!room || room.gameType !== 'hvem-sendte-det' || room.state !== 'answering') return;
     const player = room.players.find(p => p.id === socket.id);
     if (!player) return;
+    if (!getExpectedIds(room, 'answerPlayerIds').includes(socket.id)) return;
     if (room.currentRound.answers.find(a => a.playerId === socket.id)) return;
 
     const playerIdx = room.players.indexOf(player);
-    const text = String(answer || '').trim().slice(0, 200);
+    const text = String(answer || '').trim().slice(0, 180);
     if (!text) return;
 
     room.currentRound.answers.push({
@@ -1200,12 +1499,10 @@ io.on('connection', (socket) => {
       text,
     });
 
-    io.to(code).emit('hsd_answer_count', {
-      count: room.currentRound.answers.length,
-      total: room.players.length,
-    });
+    emitHsdAnswerCount(code);
 
-    if (room.currentRound.answers.length === room.players.length) {
+    const total = getExpectedIds(room, 'answerPlayerIds').length;
+    if (total > 0 && getSubmittedAnswerCount(room) >= total) {
       setTimeout(() => startVoting(code), 600);
     }
   });
@@ -1215,14 +1512,29 @@ io.on('connection', (socket) => {
     const room = rooms[code];
     if (!room || room.gameType !== 'hvem-sendte-det' || room.state !== 'voting') return;
     if (!Array.isArray(votes)) return;
-    room.currentRound.votes[socket.id] = votes;
+    if (!getExpectedIds(room, 'votingPlayerIds').includes(socket.id)) return;
+    if (room.currentRound.votes[socket.id]) return;
+    const shuffledAnswers = room.currentRound.shuffled || [];
+    if (votes.length !== shuffledAnswers.length) return;
 
-    io.to(code).emit('hsd_vote_count', {
-      count: Object.keys(room.currentRound.votes).length,
-      total: room.players.length,
-    });
+    const answerAuthorIds = new Set(shuffledAnswers.map((answer) => answer.playerId));
+    const sanitizedVotes = [];
+    for (let i = 0; i < shuffledAnswers.length; i++) {
+      const answer = shuffledAnswers[i];
+      if (answer.playerId === socket.id) {
+        sanitizedVotes.push(null);
+        continue;
+      }
+      const votedId = votes[i] == null ? null : String(votes[i]);
+      if (!votedId || votedId === socket.id || !answerAuthorIds.has(votedId)) return;
+      sanitizedVotes.push(votedId);
+    }
 
-    if (Object.keys(room.currentRound.votes).length === room.players.length) {
+    room.currentRound.votes[socket.id] = sanitizedVotes;
+    emitHsdVoteCount(code);
+
+    const total = getExpectedIds(room, 'votingPlayerIds').length;
+    if (total > 0 && getSubmittedVoteCount(room) >= total) {
       setTimeout(() => showHsdResults(code), 400);
     }
   });
@@ -1232,18 +1544,15 @@ io.on('connection', (socket) => {
     const code = socket.roomCode;
     const room = rooms[code];
     if (!room || room.gameType !== 'msl' || room.state !== 'msl-voting') return;
-    if (votedFor === socket.id) return; // can't vote for yourself
+    if (!getExpectedIds(room, 'votingPlayerIds').includes(socket.id)) return;
     if (!room.players.find((p) => p.id === votedFor)) return;
     if (room.currentRound.votes[socket.id]) return; // already voted
 
     room.currentRound.votes[socket.id] = votedFor;
+    emitMslVoteCount(code);
 
-    io.to(code).emit('msl_vote_count', {
-      count: Object.keys(room.currentRound.votes).length,
-      total: room.players.length,
-    });
-
-    if (Object.keys(room.currentRound.votes).length === room.players.length) {
+    const total = getExpectedIds(room, 'votingPlayerIds').length;
+    if (total > 0 && getSubmittedVoteCount(room) >= total) {
       setTimeout(() => showMslResults(code), 500);
     }
   });
