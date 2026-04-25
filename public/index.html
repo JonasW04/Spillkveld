@@ -1851,6 +1851,9 @@
   let mslCurrentRound = 0;
   let mslTotalRounds = 0;
   const SPECIAL_NAME = 'sebastian';
+  const SPECIAL_NAME2 = 'sebbe';
+  const SPECIAL_NAME3 = 'aarsheim';
+  const SPECIAL_NAME4 = 'seb';
   const SPECIAL_NAME_CONFIRMED = 'Sebastian';
   const SPECIAL_NAME_REJECTED = 'Ikke Sebastian';
 
@@ -2018,8 +2021,11 @@
   }
 
   async function resolvePlayerName(name) {
-    if (name.toLowerCase() !== SPECIAL_NAME) return name;
-    return showSebastianIdentityCheck();
+    if (name.toLowerCase() == SPECIAL_NAME) return showSebastianIdentityCheck(); 
+    if (name.toLowerCase() == SPECIAL_NAME2) return showSebastianIdentityCheck(); 
+    if (name.toLowerCase() == SPECIAL_NAME3) return showSebastianIdentityCheck(); 
+    if (name.toLowerCase() == SPECIAL_NAME4) return showSebastianIdentityCheck(); 
+    return name;
   }
 
   async function createRoom() {
