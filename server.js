@@ -503,7 +503,7 @@ function emitResumeState(socket, room) {
       const counts = {};
       room.players.forEach((p) => { counts[p.id] = 0; });
       Object.values(votes).forEach((votedId) => {
-        if (counts[votedId] != null) counts[votedId] += 1;
+        if (counts[votedId] !== undefined) counts[votedId] += 1;
       });
       let maxVotes = 0;
       Object.values(counts).forEach((c) => {
@@ -751,7 +751,7 @@ function showMslResults(code) {
   const counts = {};
   room.players.forEach((p) => { counts[p.id] = 0; });
   Object.values(votes).forEach((votedId) => {
-    if (counts[votedId] != null) counts[votedId] += 1;
+    if (counts[votedId] !== undefined) counts[votedId] += 1;
   });
 
   // Find max votes
