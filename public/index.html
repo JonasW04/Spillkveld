@@ -1978,16 +1978,32 @@
     const modal = document.getElementById('identity-check-modal');
     const yesBtn = document.getElementById('identity-check-yes');
     const noBtn = document.getElementById('identity-check-no');
+    const previousFocus = document.activeElement;
     return new Promise((resolve) => {
+      const onKeyDown = (e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          close('Ikke Sebastian');
+          return;
+        }
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          if (document.activeElement === yesBtn) noBtn.focus();
+          else yesBtn.focus();
+        }
+      };
       const close = (resolvedName) => {
         yesBtn.onclick = null;
         noBtn.onclick = null;
+        modal.removeEventListener('keydown', onKeyDown);
         modal.classList.remove('active');
         modal.setAttribute('aria-hidden', 'true');
+        if (previousFocus && typeof previousFocus.focus === 'function') previousFocus.focus();
         resolve(resolvedName);
       };
       yesBtn.onclick = () => close('Sebastian');
       noBtn.onclick = () => close('Ikke Sebastian');
+      modal.addEventListener('keydown', onKeyDown);
       modal.classList.add('active');
       modal.setAttribute('aria-hidden', 'false');
       yesBtn.focus();
@@ -1995,8 +2011,7 @@
   }
 
   async function resolvePlayerName(name) {
-    const trimmed = (name || '').trim();
-    if (trimmed.toLowerCase() !== 'sebastian') return trimmed;
+    if (name.toLowerCase() !== 'sebastian') return name;
     return showSebastianIdentityCheck();
   }
 
