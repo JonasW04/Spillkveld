@@ -639,6 +639,10 @@ function startHotSeatRound(code) {
   room.lastHotSeat = hotSeat.name;
 
   const category = pickHotSeatCategory(room);
+  if (!category) {
+    io.to(code).emit('game_error', 'Fant ingen kategori for denne runden');
+    return;
+  }
   room.currentRound = {
     category,
     hotSeatId: hotSeat.id,
