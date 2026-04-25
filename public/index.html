@@ -6,7 +6,7 @@
   <title>Festspill</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,700;1,9..144,400;1,9..144,500&family=Caveat:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,700;1,9..144,400;1,9..144,500&family=Caveat:wght@500;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
@@ -727,6 +727,514 @@
 
     /* top back button shared */
     body[data-theme="paper"] .btn-ghost { font-size: 13px; }
+
+    /* ─────────── VOTE THEME (Mest sannsynlig å…) ─────────── */
+    body[data-theme="vote"] {
+      --bg: #0f0c1d;
+      --bg2: #161130;
+      --ink: #f5f1ff;
+      --ink-dim: rgba(245, 241, 255, 0.62);
+      --ink-mute: rgba(245, 241, 255, 0.38);
+      --violet: #8b5cf6;
+      --violet-2: #a855f7;
+      --pink: #ec4899;
+      --pink-2: #f472b6;
+      color: #f5f1ff;
+      background:
+        radial-gradient(1200px 700px at 20% 0%, rgba(139, 92, 246, 0.18), transparent 60%),
+        radial-gradient(900px 600px at 90% 100%, rgba(236, 72, 153, 0.12), transparent 60%),
+        #07050f;
+    }
+    body[data-theme="vote"]::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: radial-gradient(rgba(255,255,255,0.04) 1px, transparent 1px);
+      background-size: 3px 3px;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.5;
+    }
+
+    body[data-theme="vote"] h1.logo {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(64px, 18vw, 88px);
+      line-height: 0.9;
+      letter-spacing: 4px;
+      background: linear-gradient(135deg, #ec4899, #8b5cf6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-align: center;
+    }
+    body[data-theme="vote"] h2 {
+      font-family: 'Bebas Neue', sans-serif;
+      letter-spacing: 1px;
+      color: #f5f1ff;
+    }
+    body[data-theme="vote"] p.sub { color: rgba(245,241,255,0.55); }
+
+    body[data-theme="vote"] input,
+    body[data-theme="vote"] textarea {
+      background: rgba(255,255,255,0.04);
+      border: 1.5px solid rgba(255,255,255,0.10);
+      border-radius: 14px;
+      color: #f5f1ff;
+    }
+    body[data-theme="vote"] input:focus,
+    body[data-theme="vote"] textarea:focus { border-color: #ec4899; }
+    body[data-theme="vote"] input::placeholder,
+    body[data-theme="vote"] textarea::placeholder { color: rgba(245,241,255,0.35); }
+
+    body[data-theme="vote"] .btn-primary {
+      background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
+      color: #fff;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px;
+      letter-spacing: 2px;
+      border-radius: 18px;
+      box-shadow: 0 12px 30px rgba(236, 72, 153, 0.35), inset 0 0 0 1px rgba(255,255,255,0.08);
+    }
+    body[data-theme="vote"] .btn-primary:disabled {
+      background: rgba(255,255,255,0.08);
+      color: rgba(245,241,255,0.4);
+      box-shadow: none;
+    }
+    body[data-theme="vote"] .btn-secondary {
+      background: rgba(255,255,255,0.06);
+      color: #f5f1ff;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 18px;
+    }
+    body[data-theme="vote"] .btn-ghost { color: rgba(245,241,255,0.55); }
+    body[data-theme="vote"] .divider { color: rgba(245,241,255,0.4); }
+    body[data-theme="vote"] .divider::before,
+    body[data-theme="vote"] .divider::after { background: rgba(255,255,255,0.10); }
+
+    .game-card.vote {
+      background: linear-gradient(180deg, rgba(139,92,246,0.15), rgba(236,72,153,0.1));
+      border-color: rgba(244,114,182,0.35);
+      color: #f5f1ff;
+    }
+    .game-card.vote .g-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 28px;
+      letter-spacing: 2px;
+      background: linear-gradient(135deg, #ec4899, #8b5cf6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .game-card.vote .g-sub { color: rgba(245,241,255,0.6); }
+    .game-card.vote .g-meta { color: rgba(245,241,255,0.4); }
+
+    /* Glass panel */
+    .ml-glass {
+      background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 22px;
+      backdrop-filter: blur(18px) saturate(1.2);
+      -webkit-backdrop-filter: blur(18px) saturate(1.2);
+      box-shadow: 0 1px 0 rgba(255,255,255,0.08) inset, 0 20px 60px rgba(0,0,0,0.45);
+      padding: 18px;
+    }
+
+    .ml-eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: rgba(245,241,255,0.55);
+      font-weight: 500;
+    }
+
+    .ml-pill {
+      display: inline-flex; align-items: center; gap: 8px;
+      height: 30px; padding: 0 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: rgba(245,241,255,0.85);
+      font-size: 12.5px; font-weight: 500;
+      letter-spacing: 0.04em;
+    }
+    .ml-pill.accent { background: rgba(139,92,246,0.18); border-color: rgba(167,139,250,0.5); color: #e9defc; }
+    .ml-pill.pink { background: rgba(236,72,153,0.18); border-color: rgba(244,114,182,0.5); color: #ffd3e7; }
+    .ml-pill .dot {
+      width: 6px; height: 6px; border-radius: 999px;
+    }
+
+    .ml-roomcode {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      margin: 14px 0 6px;
+    }
+    .ml-roomcode .ml-eyebrow { letter-spacing: 0.32em; }
+    .ml-roomcode .code {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 68px;
+      line-height: 0.9;
+      letter-spacing: 0.10em;
+      background: linear-gradient(180deg, #fff 0%, #d6c7ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-shadow: 0 6px 40px rgba(167, 139, 250, 0.4);
+      padding-left: 0.10em;
+    }
+
+    .ml-display {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 16px;
+      letter-spacing: 0.32em;
+      color: rgba(244,114,182,0.85);
+      text-align: center;
+    }
+
+    /* Round chip — vote theme */
+    body[data-theme="vote"] .round-picker {
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+    }
+    body[data-theme="vote"] .round-chip {
+      height: 48px; padding: 0;
+      border-radius: 14px;
+      border: none;
+      background: rgba(255,255,255,0.06);
+      color: rgba(245,241,255,0.85);
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px; letter-spacing: 0.08em;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10);
+      transition: all 180ms ease;
+    }
+    body[data-theme="vote"] .round-chip.active {
+      background: linear-gradient(135deg, #ec4899, #8b5cf6);
+      color: #fff;
+      box-shadow: 0 8px 22px rgba(236,72,153,0.35), inset 0 0 0 1px rgba(255,255,255,0.15);
+    }
+
+    /* Avatar (vote theme) */
+    .ml-avatar {
+      position: relative;
+      border-radius: 50%;
+      display: grid; place-items: center;
+      color: #0f0c1d;
+      font-family: 'Bebas Neue', sans-serif;
+      letter-spacing: 0.04em;
+      transition: transform 200ms ease, filter 200ms ease, box-shadow 300ms ease;
+      box-shadow: inset 0 -6px 16px rgba(0,0,0,0.25), 0 6px 18px rgba(0,0,0,0.35);
+    }
+    .ml-avatar.dim { filter: saturate(0.5) brightness(0.65); }
+    .ml-avatar.ring { transform: scale(1.04); }
+
+    .ml-player-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      justify-items: center;
+    }
+    .ml-player-grid .cell {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+    }
+    .ml-player-grid .cell .name {
+      font-size: 11px; color: rgba(245,241,255,0.75); font-weight: 500;
+    }
+    .ml-player-grid .cell.empty .av {
+      width: 54px; height: 54px; border-radius: 50%;
+      border: 1.5px dashed rgba(255,255,255,0.18);
+      display: grid; place-items: center;
+      color: rgba(245,241,255,0.35); font-size: 22px;
+      box-shadow: none; background: transparent;
+    }
+    .ml-player-grid .cell.empty .name { color: rgba(245,241,255,0.4); }
+
+    /* Statement card */
+    .ml-statement-card {
+      padding: 26px 22px 28px;
+      background: linear-gradient(160deg, rgba(139,92,246,0.22) 0%, rgba(236,72,153,0.18) 100%);
+      border: 1px solid rgba(244,114,182,0.28);
+      border-radius: 22px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 1px 0 rgba(255,255,255,0.08) inset, 0 20px 60px rgba(0,0,0,0.45);
+    }
+    .ml-statement-card::after {
+      content: '';
+      position: absolute; width: 220px; height: 220px;
+      top: -110px; right: -80px;
+      background: radial-gradient(circle, rgba(236,72,153,0.5), transparent 60%);
+      filter: blur(20px);
+      pointer-events: none;
+    }
+    .ml-statement-tag {
+      display: inline-flex; align-items: center; gap: 8px;
+      margin-bottom: 14px;
+      padding: 5px 11px; border-radius: 999px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+      color: rgba(245,241,255,0.85); font-weight: 500;
+      position: relative; z-index: 1;
+    }
+    .ml-statement-text {
+      font-family: 'Instrument Serif', 'Georgia', serif;
+      font-style: italic;
+      font-size: 30px; line-height: 1.18; letter-spacing: -0.01em;
+      color: #fff; font-weight: 400;
+      text-shadow: 0 2px 12px rgba(0,0,0,0.3);
+      position: relative; z-index: 1;
+    }
+
+    /* Voting avatar grid */
+    .ml-vote-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      justify-items: center;
+      margin-top: 8px;
+    }
+    .ml-vote-cell {
+      background: transparent; border: none; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      padding: 4px; border-radius: 16px;
+      width: auto;
+    }
+    .ml-vote-cell .name {
+      font-size: 13px; color: rgba(245,241,255,0.7); font-weight: 500;
+    }
+    .ml-vote-cell.selected .name { color: #fff; font-weight: 600; }
+
+    /* Round header */
+    .ml-round-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .ml-round-header .left {
+      font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
+      color: rgba(245,241,255,0.55); font-weight: 500;
+    }
+    .ml-round-header .right {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 14px; letter-spacing: 0.12em;
+      color: rgba(245,241,255,0.85);
+    }
+    .ml-round-header .right .dot { color: #f472b6; }
+
+    /* Waiting */
+    @keyframes glowRingV {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.55), 0 0 30px rgba(236, 72, 153, 0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(236, 72, 153, 0.0), 0 0 40px rgba(236, 72, 153, 0.65); }
+    }
+    @keyframes pulseDotV {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.45; }
+      30% { transform: translateY(-4px); opacity: 1; }
+    }
+    .ml-pulse-dots {
+      display: inline-flex; gap: 6px; align-items: flex-end;
+    }
+    .ml-pulse-dots span {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: rgba(245,241,255,0.85);
+      animation: pulseDotV 1.2s ease-in-out infinite;
+    }
+    .ml-pulse-dots span:nth-child(2) { animation-delay: 0.15s; }
+    .ml-pulse-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+    .ml-waiting-counter {
+      width: 92px; height: 92px; border-radius: 50%;
+      background: linear-gradient(135deg, #ec4899, #8b5cf6);
+      display: grid; place-items: center;
+      color: #fff;
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 36px;
+      letter-spacing: 0.04em;
+      box-shadow: 0 14px 40px rgba(236,72,153,0.45);
+      position: relative;
+    }
+    .ml-waiting-rings {
+      position: relative;
+      width: 92px; height: 92px;
+      display: grid; place-items: center;
+    }
+    .ml-waiting-rings .ring {
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      border: 1px solid rgba(244,114,182,0.45);
+      animation: glowRingV 2.4s ease-in-out infinite;
+    }
+    .ml-waiting-rings .ring:nth-child(2) { animation-delay: 0.6s; }
+    .ml-waiting-rings .ring:nth-child(3) { animation-delay: 1.2s; }
+
+    .ml-waiting-strip {
+      display: flex; gap: 8px; justify-content: space-between;
+      margin-top: 12px;
+    }
+    .ml-waiting-strip .pcell { position: relative; }
+    .ml-waiting-strip .pcell .check {
+      position: absolute; bottom: -2px; right: -2px;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: #4ade80;
+      border: 2px solid #0f0c1d;
+      display: grid; place-items: center;
+      color: #0f0c1d; font-size: 10px;
+    }
+
+    /* Results */
+    @keyframes popV {
+      0% { transform: scale(0.6); opacity: 0; }
+      60% { transform: scale(1.08); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+    @keyframes barGrowV {
+      from { transform: scaleX(0); }
+      to { transform: scaleX(1); }
+    }
+    .ml-pop { animation: popV 420ms cubic-bezier(.2,.7,.2,1) both; }
+
+    .ml-winner-card {
+      padding: 20px 18px 22px;
+      background: linear-gradient(160deg, rgba(244,114,182,0.28) 0%, rgba(139,92,246,0.18) 100%);
+      border: 1px solid rgba(244,114,182,0.5);
+      border-radius: 22px;
+      position: relative; overflow: hidden;
+      box-shadow: 0 1px 0 rgba(255,255,255,0.08) inset, 0 20px 60px rgba(0,0,0,0.45);
+      text-align: center;
+    }
+    .ml-winner-card::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(80% 60% at 80% 0%, rgba(244,114,182,0.55), transparent 60%);
+      pointer-events: none;
+    }
+    .ml-winner-card .inner {
+      position: relative; z-index: 1;
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+    }
+    .ml-winner-tag {
+      font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
+      color: rgba(255,255,255,0.85); font-weight: 600;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 999px;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.14);
+    }
+    .ml-winner-name {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 38px; letter-spacing: 0.02em; color: #fff; line-height: 1;
+    }
+    .ml-winner-meta { font-size: 12px; color: rgba(245,241,255,0.7); }
+
+    .ml-bar-row {
+      display: grid; grid-template-columns: 32px 1fr auto;
+      gap: 12px; align-items: center;
+      animation: fadeUp 0.35s ease both;
+    }
+    .ml-bar-row .meta-line {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 6px;
+    }
+    .ml-bar-row .name {
+      font-size: 13px; color: #f5f1ff; font-weight: 500;
+    }
+    .ml-bar-row .vote-num {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 16px; letter-spacing: 0.08em;
+      color: rgba(245,241,255,0.55);
+    }
+    .ml-bar-row.winner .vote-num { color: #f472b6; }
+    .ml-bar {
+      position: relative;
+      height: 8px; border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      overflow: hidden;
+    }
+    .ml-bar .fill {
+      position: absolute; top: 0; left: 0; bottom: 0;
+      transform-origin: left center;
+      animation: barGrowV 700ms cubic-bezier(.2,.7,.2,1) both;
+      border-radius: 999px;
+    }
+
+    .ml-score-card {
+      padding: 14px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .ml-score-card .delta-label { font-size: 12px; color: rgba(245,241,255,0.55); }
+    .ml-score-card .delta-val {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px; letter-spacing: 0.02em; color: #fff; line-height: 1;
+    }
+    .ml-score-card .total-label {
+      font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+      color: rgba(245,241,255,0.55); text-align: right;
+    }
+    .ml-score-card .total-val {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 22px; letter-spacing: 0.08em; color: #fff;
+    }
+
+    /* Leaderboard (vote theme) */
+    body[data-theme="vote"] h2.ml-board-title {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 48px; letter-spacing: 0.01em; line-height: 0.95;
+      background: linear-gradient(180deg, #fff 0%, #d6c7ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-align: left;
+      margin-top: 14px;
+    }
+    .ml-podium {
+      display: grid; grid-template-columns: 1fr 1.15fr 1fr;
+      align-items: end; gap: 10px;
+      margin-top: 18px;
+    }
+    .ml-podium .col {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+    }
+    .ml-podium .name { font-size: 12.5px; color: #fff; font-weight: 600; line-height: 1.1; text-align: center; }
+    .ml-podium .pts {
+      font-family: 'Bebas Neue', sans-serif; font-size: 18px;
+      letter-spacing: 0.08em; line-height: 1.1; color: rgba(245,241,255,0.7);
+    }
+    .ml-podium .col.gold .pts { color: #facc15; }
+    .ml-podium .step {
+      width: 100%; border-radius: 10px 10px 0 0;
+      display: grid; place-items: center;
+      color: #0f0c1d;
+      font-family: 'Bebas Neue', sans-serif; font-size: 30px;
+      letter-spacing: 0.04em;
+      box-shadow: inset 0 -8px 16px rgba(0,0,0,0.18), 0 12px 30px rgba(0,0,0,0.35);
+    }
+    .ml-podium .col.gold .step { height: 86px; background: linear-gradient(180deg, #facc15 0%, #f59e0b 100%); }
+    .ml-podium .col.silver .step { height: 62px; background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(200,200,220,0.7)); }
+    .ml-podium .col.bronze .step { height: 48px; background: linear-gradient(180deg, #fb923c 0%, #ea580c 100%); }
+
+    .ml-board-rest {
+      margin-top: 18px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .ml-board-row {
+      display: grid; grid-template-columns: 32px 40px 1fr auto;
+      gap: 12px; align-items: center;
+      padding: 10px 14px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      animation: fadeUp 0.35s ease both;
+    }
+    .ml-board-row .rank {
+      font-family: 'Bebas Neue', sans-serif; font-size: 18px;
+      letter-spacing: 0.08em; color: rgba(245,241,255,0.55);
+    }
+    .ml-board-row .name {
+      font-size: 14px; color: #f5f1ff; font-weight: 500;
+    }
+    .ml-board-row .pts {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 18px; color: rgba(245,241,255,0.7); letter-spacing: 0.06em;
+    }
   </style>
 </head>
 <body data-theme="dark">
@@ -746,6 +1254,12 @@
     <div class="g-title">Hvem sendte det?</div>
     <div class="g-sub">Svar anonymt. Gjett hvem som skrev hva. Avslør hemmeligheter.</div>
     <div class="g-meta">3+ spillere · 15 min</div>
+  </button>
+
+  <button class="game-card vote" onclick="selectGame('msl')">
+    <div class="g-title">MEST SANNSYNLIG Å… 🫵</div>
+    <div class="g-sub">Stem på hvem i rommet som passer best. Avslør gruppen.</div>
+    <div class="g-meta">3+ spillere · 10 min</div>
   </button>
 </div>
 
@@ -1056,6 +1570,205 @@
   <button class="btn-primary" onclick="goToFrontPage()">Til forsiden</button>
 </div>
 
+<!-- ================== MEST SANNSYNLIG Å SCREENS ================== -->
+
+<!-- LOBBY (HOST) — MSL -->
+<div id="screen-msl-lobby-host" class="screen">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <div class="ml-pill accent">
+      <span class="dot" style="background:#a78bfa; box-shadow:0 0 8px #a78bfa;"></span>
+      Vert
+    </div>
+  </div>
+  <div class="ml-roomcode">
+    <div class="ml-display">MEST SANNSYNLIG Å…</div>
+    <div class="ml-eyebrow">Romkode</div>
+    <div class="code" id="msl-host-code">----</div>
+  </div>
+  <div id="qr-container-msl" style="display:flex; justify-content:center;"></div>
+
+  <div class="ml-glass">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <div style="font-size:13px; color:rgba(245,241,255,0.65); font-weight:500;">Spillere</div>
+      <div style="font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:0.1em; color:#f472b6;" id="msl-player-count-host">0/8</div>
+    </div>
+    <div id="msl-lobby-grid-host" class="ml-player-grid"></div>
+  </div>
+
+  <div>
+    <div class="ml-eyebrow" style="margin-bottom:10px;">Antall runder</div>
+    <div class="round-picker" id="msl-round-picker">
+      <button class="round-chip" onclick="setMslRounds(3)">3</button>
+      <button class="round-chip active" onclick="setMslRounds(5)">5</button>
+      <button class="round-chip" onclick="setMslRounds(7)">7</button>
+      <button class="round-chip" onclick="setMslRounds(10)">10</button>
+      <button class="round-chip" onclick="setMslRounds(15)">15</button>
+    </div>
+  </div>
+
+  <button class="btn-primary" id="msl-start-btn" onclick="startGame()" disabled>Trenger 3 spillere til</button>
+  <p class="sub" style="text-align:center; font-size:12px; color:rgba(245,241,255,0.4);" id="msl-start-hint">Min. 3 spillere · maks. 8</p>
+</div>
+
+<!-- LOBBY (GUEST) — MSL -->
+<div id="screen-msl-lobby-guest" class="screen">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <div class="ml-pill pink" id="msl-guest-pill">
+      <span class="dot" style="background:#f472b6; box-shadow:0 0 8px #f472b6;"></span>
+      <span id="msl-guest-name">Du</span>
+    </div>
+  </div>
+  <div class="ml-roomcode">
+    <div class="ml-display">MEST SANNSYNLIG Å…</div>
+    <div class="ml-eyebrow">Romkode</div>
+    <div class="code" id="msl-guest-code">----</div>
+  </div>
+
+  <div class="ml-glass">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <div style="font-size:13px; color:rgba(245,241,255,0.65); font-weight:500;">I rommet</div>
+      <div style="font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:0.1em; color:#f472b6;" id="msl-player-count-guest">0/8</div>
+    </div>
+    <div id="msl-lobby-grid-guest" class="ml-player-grid"></div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; align-items:center; gap:14px; margin-top:16px;">
+    <div style="width:64px; height:64px; border-radius:50%; background:radial-gradient(circle, rgba(139,92,246,0.4), transparent 70%); display:grid; place-items:center; animation:glowRingV 2.4s ease-in-out infinite;">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 7v5l3 2" />
+      </svg>
+    </div>
+    <div style="font-family:'Bebas Neue',sans-serif; font-size:26px; letter-spacing:0.04em; color:#f5f1ff; text-align:center; line-height:1.05;">
+      Venter på at verten<br>starter spillet
+    </div>
+    <div style="display:flex; align-items:center; gap:10px; color:rgba(245,241,255,0.55); font-size:13px;">
+      <span class="ml-pulse-dots"><span></span><span></span><span></span></span>
+      <span>Snart i gang</span>
+    </div>
+  </div>
+</div>
+
+<!-- VOTING — MSL -->
+<div id="screen-msl-voting" class="screen">
+  <div class="ml-round-header">
+    <div class="left">Mest sannsynlig å…</div>
+    <div class="right"><span class="dot">●</span> <span id="msl-vote-round-label">Runde 1/5</span></div>
+  </div>
+
+  <div class="ml-statement-card">
+    <div class="ml-statement-tag">
+      <span>🫵</span>
+      <span>Mest sannsynlig å</span>
+    </div>
+    <div class="ml-statement-text" id="msl-statement-text">…</div>
+  </div>
+
+  <div class="ml-eyebrow" style="text-align:center; margin-top:12px;">Tapp på den du tror passer</div>
+  <div id="msl-vote-grid" class="ml-vote-grid"></div>
+
+  <button class="btn-primary" id="msl-vote-btn" onclick="submitMslVote()" disabled>Velg en spiller</button>
+</div>
+
+<!-- WAITING — MSL -->
+<div id="screen-msl-waiting" class="screen">
+  <div class="ml-round-header">
+    <div class="left">Mest sannsynlig å…</div>
+    <div class="right"><span class="dot">●</span> <span id="msl-wait-round-label">Runde 1/5</span></div>
+  </div>
+
+  <div class="ml-glass" style="opacity:0.85; padding:18px;">
+    <div class="ml-eyebrow" style="margin-bottom:8px;">Mest sannsynlig å</div>
+    <div style="font-family:'Instrument Serif',serif; font-style:italic; font-size:19px; line-height:1.22; color:rgba(255,255,255,0.92);" id="msl-wait-statement">…</div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; align-items:center; gap:24px; padding:24px 0; margin-top:8px;">
+    <div class="ml-waiting-rings">
+      <div class="ring"></div>
+      <div class="ring"></div>
+      <div class="ring"></div>
+      <div class="ml-waiting-counter" id="msl-waiting-counter">0/0</div>
+    </div>
+    <div style="font-family:'Bebas Neue',sans-serif; font-size:30px; letter-spacing:0.02em; text-align:center; color:#fff; line-height:1.0;">
+      Venter på<br>at alle stemmer
+    </div>
+    <div style="display:flex; align-items:center; gap:10px; color:rgba(245,241,255,0.6); font-size:14px;">
+      <span class="ml-pulse-dots"><span></span><span></span><span></span></span>
+      <span id="msl-waiting-text">0 av 0 har stemt</span>
+    </div>
+  </div>
+
+  <div class="ml-glass" style="padding:14px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <span class="ml-eyebrow">Status</span>
+      <span style="font-size:11px; color:rgba(245,241,255,0.55);" id="msl-waiting-remaining">0 igjen</span>
+    </div>
+    <div class="ml-waiting-strip" id="msl-waiting-strip"></div>
+  </div>
+</div>
+
+<!-- RESULTS — MSL -->
+<div id="screen-msl-results" class="screen">
+  <div class="ml-round-header">
+    <div class="left">Resultater</div>
+    <div class="right"><span class="dot">●</span> <span id="msl-results-round-label">Runde 1/5</span></div>
+  </div>
+
+  <div class="ml-winner-card">
+    <div class="inner">
+      <div class="ml-pop" id="msl-winner-avatar"></div>
+      <div class="ml-winner-tag">
+        <span>🫵</span>
+        <span id="msl-winner-tag-text">Det ble …</span>
+      </div>
+      <div class="ml-winner-name" id="msl-winner-name">…</div>
+      <div class="ml-winner-meta" id="msl-winner-meta">0 av 0 stemmer</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="ml-eyebrow" style="margin-bottom:14px;">Fordeling</div>
+    <div id="msl-results-bars" style="display:flex; flex-direction:column; gap:12px;"></div>
+  </div>
+
+  <div class="ml-glass ml-score-card">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div id="msl-score-avatar"></div>
+      <div>
+        <div class="delta-label">Du fikk</div>
+        <div class="delta-val" id="msl-score-delta">+0 poeng</div>
+      </div>
+    </div>
+    <div>
+      <div class="total-label">Totalt</div>
+      <div class="total-val" id="msl-score-total">0 pts</div>
+    </div>
+  </div>
+
+  <div id="msl-host-result-btn" style="display:none;">
+    <button class="btn-primary" onclick="nextRound()">Neste runde →</button>
+  </div>
+  <div id="msl-guest-result-msg" style="display:none;">
+    <p class="sub" style="text-align:center;">Venter på verten…</p>
+  </div>
+</div>
+
+<!-- LEADERBOARD — MSL -->
+<div id="screen-msl-leaderboard" class="screen">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <div class="ml-display">FERDIG</div>
+    <div class="ml-pill" id="msl-board-rounds-pill">Etter 0 runder</div>
+  </div>
+
+  <h2 class="ml-board-title">Resultattavle</h2>
+
+  <div id="msl-podium" class="ml-podium"></div>
+
+  <div id="msl-board-rest" class="ml-board-rest"></div>
+
+  <button class="btn-primary" onclick="goToFrontPage()" style="margin-top:14px;">Spill igjen</button>
+</div>
+
 <script>
   const socket = io();
   let myName = '';
@@ -1078,12 +1791,72 @@
   let hsdCurrentRound = 0;
   let hsdTotalRounds = 0;
 
+  // MSL state
+  let mslPlayers = []; // [{ id, name, idx }]
+  let mslSelectedVote = null; // playerId
+  let mslSelectedRounds = 5;
+  let mslStatement = '';
+  let mslCurrentRound = 0;
+  let mslTotalRounds = 0;
+
   const AVATAR_COLORS = ['#FF5500','#00E5C3','#9B5DE5','#F15BB5','#FEE440','#00BBF9','#FF9F1C','#2EC4B6'];
   const PAPER_COLORS  = ['#c48a8a','#7a8a6a','#d4a24a','#c66a4a','#6b7a8a','#8a6b7a','#a88a5a','#9a7a8a'];
+  const VOTE_COLORS   = [
+    { bg: '#8b5cf6', glow: 'rgba(139,92,246,0.55)' },
+    { bg: '#ec4899', glow: 'rgba(236,72,153,0.55)' },
+    { bg: '#22d3ee', glow: 'rgba(34,211,238,0.55)' },
+    { bg: '#facc15', glow: 'rgba(250,204,21,0.55)' },
+    { bg: '#4ade80', glow: 'rgba(74,222,128,0.55)' },
+    { bg: '#fb923c', glow: 'rgba(251,146,60,0.55)' },
+    { bg: '#f472b6', glow: 'rgba(244,114,182,0.55)' },
+    { bg: '#a78bfa', glow: 'rgba(167,139,250,0.55)' },
+  ];
+
+  function lighten(hex, amount) {
+    const h = hex.replace('#','');
+    const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+    const lr = Math.min(255, r + (255-r)*amount);
+    const lg = Math.min(255, g + (255-g)*amount);
+    const lb = Math.min(255, b + (255-b)*amount);
+    return 'rgb(' + lr.toFixed(0) + ',' + lg.toFixed(0) + ',' + lb.toFixed(0) + ')';
+  }
+
+  function initialsOf(name) {
+    return String(name).split(' ').map(s => s[0] || '').slice(0,2).join('').toUpperCase();
+  }
+
+  function mlAvatarHTML(player, size, opts) {
+    opts = opts || {};
+    const c = VOTE_COLORS[player.idx % VOTE_COLORS.length];
+    const ring = opts.ring;
+    const dim = opts.dim;
+    const count = opts.count;
+    const fontSize = Math.round(size * 0.42);
+    const ringShadow = ring
+      ? '0 0 0 3px rgba(255,255,255,0.95), 0 0 0 6px ' + c.bg + ', 0 10px 30px ' + c.glow
+      : 'inset 0 -6px 16px rgba(0,0,0,0.25), 0 6px 18px rgba(0,0,0,0.35)';
+    const transform = ring ? 'scale(1.04)' : 'scale(1)';
+    const filter = dim ? 'saturate(0.5) brightness(0.65)' : 'none';
+    const bgGrad = 'radial-gradient(120% 120% at 30% 25%, ' + lighten(c.bg, 0.18) + ', ' + c.bg + ' 70%)';
+    let badge = '';
+    if (count != null) {
+      badge = '<div style="position:absolute; top:-4px; right:-4px; min-width:22px; height:22px; padding:0 6px; border-radius:11px; background:#0f0c1d; border:1.5px solid rgba(255,255,255,0.9); display:grid; place-items:center; color:#fff; font-family:\'Bebas Neue\',sans-serif; font-size:13px; letter-spacing:0.06em;">' + count + '</div>';
+    }
+    return '<div class="ml-avatar' + (ring ? ' ring' : '') + (dim ? ' dim' : '') + '"' +
+      ' style="width:' + size + 'px; height:' + size + 'px; font-size:' + fontSize + 'px;' +
+      ' background:' + bgGrad + ';' +
+      ' box-shadow:' + ringShadow + ';' +
+      ' transform:' + transform + ';' +
+      ' filter:' + filter + ';">' +
+      '<span style="margin-top:2px;">' + initialsOf(player.name) + '</span>' +
+      badge +
+      '</div>';
+  }
 
   function colorFor(i) {
-    const set = currentGame === 'hvem-sendte-det' ? PAPER_COLORS : AVATAR_COLORS;
-    return set[i % set.length];
+    if (currentGame === 'hvem-sendte-det') return PAPER_COLORS[i % PAPER_COLORS.length];
+    if (currentGame === 'msl') return VOTE_COLORS[i % VOTE_COLORS.length].bg;
+    return AVATAR_COLORS[i % AVATAR_COLORS.length];
   }
 
   function showScreen(id) {
@@ -1093,7 +1866,10 @@
   }
 
   function applyTheme(game) {
-    document.body.dataset.theme = game === 'hvem-sendte-det' ? 'paper' : 'dark';
+    let theme = 'dark';
+    if (game === 'hvem-sendte-det') theme = 'paper';
+    else if (game === 'msl') theme = 'vote';
+    document.body.dataset.theme = theme;
     const title = document.getElementById('home-logo');
     const sub = document.getElementById('home-sub');
     const emoji = document.getElementById('create-emoji');
@@ -1102,6 +1878,11 @@
       sub.textContent = 'Svar anonymt. Gjett hvem som skrev hva. Avslør hemmeligheter.';
       emoji.textContent = '✉️';
       document.title = 'Hvem sendte det?';
+    } else if (game === 'msl') {
+      title.innerHTML = 'MEST<br>SANN-<br>SYNLIG';
+      sub.textContent = 'Stem på hvem i rommet som passer best.';
+      emoji.textContent = '🫵';
+      document.title = 'Mest sannsynlig å…';
     } else {
       title.innerHTML = 'HOT<br>SEAT';
       sub.textContent = 'Gjett kategorien mens de andre gir deg hint — ett ord om gangen.';
@@ -1191,6 +1972,28 @@
     updateRoundPickerUI();
     socket.emit('set_rounds', { rounds });
   }
+  function setMslRounds(rounds) {
+    mslSelectedRounds = rounds;
+    updateMslRoundPickerUI();
+    socket.emit('msl_set_rounds', { rounds });
+  }
+  function updateMslRoundPickerUI() {
+    const chips = document.querySelectorAll('#msl-round-picker .round-chip');
+    chips.forEach((chip) => {
+      const value = Number(chip.textContent.trim());
+      chip.classList.toggle('active', value === mslSelectedRounds);
+    });
+  }
+  function submitMslVote() {
+    if (!mslSelectedVote) return;
+    socket.emit('msl_vote', { votedFor: mslSelectedVote });
+    document.getElementById('msl-vote-btn').disabled = true;
+    document.getElementById('msl-vote-btn').textContent = 'Stemt!';
+    // Pre-render waiting screen with current vote count of 1
+    showScreen('screen-msl-waiting');
+    document.getElementById('msl-wait-statement').textContent = '…' + mslStatement + '.';
+    document.getElementById('msl-wait-round-label').textContent = 'Runde ' + mslCurrentRound + '/' + mslTotalRounds;
+  }
   function updateRoundPickerUI() {
     const chips = document.querySelectorAll('#hsd-round-picker .round-chip');
     chips.forEach((chip) => {
@@ -1265,6 +2068,50 @@
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
   }
 
+  function renderMslPlayers(players, gridId, countId) {
+    const grid = document.getElementById(gridId);
+    const count = document.getElementById(countId);
+    count.textContent = players.length + '/8';
+    grid.innerHTML = '';
+    players.forEach((p, i) => {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      const isMe = p.name === myName;
+      cell.innerHTML = mlAvatarHTML({ name: p.name, idx: i }, 54, { ring: isMe }) +
+        '<span class="name">' + escapeHtml(p.name) + (isMe ? ' (du)' : '') + '</span>';
+      grid.appendChild(cell);
+    });
+    // Empty slot if room
+    if (players.length < 8) {
+      const empty = document.createElement('div');
+      empty.className = 'cell empty';
+      empty.innerHTML = '<div class="av">+</div><span class="name">venter</span>';
+      grid.appendChild(empty);
+    }
+  }
+
+  function renderMslVoteGrid() {
+    const grid = document.getElementById('msl-vote-grid');
+    grid.innerHTML = '';
+    const others = mslPlayers.filter((p) => p.name !== myName);
+    others.forEach((p) => {
+      const isSel = mslSelectedVote === p.id;
+      const anySel = mslSelectedVote != null;
+      const cell = document.createElement('button');
+      cell.className = 'ml-vote-cell' + (isSel ? ' selected' : '');
+      cell.innerHTML = mlAvatarHTML(p, 72, { ring: isSel, dim: anySel && !isSel }) +
+        '<span class="name">' + escapeHtml(p.name) + '</span>';
+      cell.onclick = () => {
+        mslSelectedVote = p.id;
+        renderMslVoteGrid();
+        const btn = document.getElementById('msl-vote-btn');
+        btn.disabled = false;
+        btn.textContent = 'Stem';
+      };
+      grid.appendChild(cell);
+    });
+  }
+
   // ───────── Socket events ─────────
   socket.on('room_created', ({ code, gameType }) => {
     myCode = code;
@@ -1279,6 +2126,13 @@
       qr.innerHTML = '';
       new QRCode(qr, { text: url, width: 140, height: 140, colorDark: '#f5efe0', colorLight: '#1a1713' });
       showScreen('screen-hsd-lobby-host');
+    } else if (gameType === 'msl') {
+      document.getElementById('msl-host-code').textContent = code;
+      const url = window.location.origin + '?code=' + code;
+      const qr = document.getElementById('qr-container-msl');
+      qr.innerHTML = '';
+      new QRCode(qr, { text: url, width: 140, height: 140, colorDark: '#f5f1ff', colorLight: '#161130' });
+      showScreen('screen-msl-lobby-host');
     } else {
       document.getElementById('display-code').textContent = code;
       const url = window.location.origin + '?code=' + code;
@@ -1297,6 +2151,10 @@
     if (gameType === 'hvem-sendte-det') {
       document.getElementById('hsd-guest-code').textContent = code;
       showScreen('screen-hsd-lobby-guest');
+    } else if (gameType === 'msl') {
+      document.getElementById('msl-guest-code').textContent = code;
+      document.getElementById('msl-guest-name').textContent = 'Du er ' + myName;
+      showScreen('screen-msl-lobby-guest');
     } else {
       document.getElementById('guest-display-code').textContent = code;
       showScreen('screen-lobby-guest');
@@ -1319,6 +2177,17 @@
       const startBtn = document.getElementById('hsd-start-btn');
       startBtn.disabled = players.length < 3;
       startBtn.textContent = players.length < 3 ? 'Trenger minst 3 spillere' : 'Start spillet (' + players.length + ' spillere)';
+    } else if (gameType === 'msl') {
+      if (selectedRounds) mslSelectedRounds = selectedRounds;
+      updateMslRoundPickerUI();
+      renderMslPlayers(players, 'msl-lobby-grid-host', 'msl-player-count-host');
+      renderMslPlayers(players, 'msl-lobby-grid-guest', 'msl-player-count-guest');
+      const startBtn = document.getElementById('msl-start-btn');
+      const canStart = players.length >= 3;
+      startBtn.disabled = !canStart;
+      startBtn.textContent = canStart
+        ? 'Start spillet'
+        : 'Trenger ' + (3 - players.length) + ' spillere til';
     } else {
       hotSeatGuessesPerPlayer = data.hotSeatGuessesPerPlayer || hotSeatGuessesPerPlayer;
       hotSeatTotalRounds = data.hotSeatTotalRounds || (players.length * hotSeatGuessesPerPlayer);
@@ -1483,6 +2352,151 @@
     showScreen('screen-hsd-reveal');
   });
 
+  // ── Mest sannsynlig å ──
+  socket.on('msl_round_start', ({ statement, players, roundNumber, totalRounds }) => {
+    mslPlayers = players;
+    mslStatement = statement;
+    mslCurrentRound = roundNumber;
+    mslTotalRounds = totalRounds;
+    mslSelectedVote = null;
+
+    document.getElementById('msl-statement-text').textContent = '…' + statement + '.';
+    document.getElementById('msl-vote-round-label').textContent = 'Runde ' + roundNumber + '/' + totalRounds;
+    const btn = document.getElementById('msl-vote-btn');
+    btn.disabled = true;
+    btn.textContent = 'Velg en spiller';
+    renderMslVoteGrid();
+    showScreen('screen-msl-voting');
+  });
+
+  socket.on('msl_vote_count', ({ count, total }) => {
+    document.getElementById('msl-waiting-counter').textContent = count + '/' + total;
+    document.getElementById('msl-waiting-text').textContent = count + ' av ' + total + ' har stemt';
+    document.getElementById('msl-waiting-remaining').textContent = (total - count) + ' igjen';
+
+    // Render player strip with check marks for voters we know about
+    const strip = document.getElementById('msl-waiting-strip');
+    strip.innerHTML = '';
+    mslPlayers.forEach((p, i) => {
+      const hasVoted = i < count; // server doesn't tell us who voted; show progressively
+      const cell = document.createElement('div');
+      cell.className = 'pcell';
+      cell.innerHTML = mlAvatarHTML(p, 36, { dim: !hasVoted }) +
+        (hasVoted ? '<div class="check">✓</div>' : '');
+      strip.appendChild(cell);
+    });
+  });
+
+  socket.on('msl_results', ({ statement, players, winners, isTie, totalVotes, myDelta, myTotalScore, roundNumber, totalRounds, isHost: hostId }) => {
+    document.getElementById('msl-results-round-label').textContent = 'Runde ' + roundNumber + '/' + totalRounds;
+
+    // Winner is the first one in winners array (or top by votes)
+    const winnerId = winners[0];
+    const winner = players.find((p) => p.id === winnerId) || players[0];
+    const me = players.find((p) => p.name === myName);
+
+    const winnerAvatarHost = document.getElementById('msl-winner-avatar');
+    winnerAvatarHost.innerHTML = mlAvatarHTML(winner, 72, { ring: true });
+
+    const winnerTagText = isTie
+      ? 'Uavgjort!'
+      : (winner.name === myName ? 'Det ble deg!' : 'Det ble ' + winner.name);
+    document.getElementById('msl-winner-tag-text').textContent = winnerTagText;
+    document.getElementById('msl-winner-name').textContent = isTie
+      ? winners.map((id) => (players.find((p) => p.id === id) || {}).name).filter(Boolean).join(' & ')
+      : winner.name;
+    document.getElementById('msl-winner-meta').textContent = winner.votes + ' av ' + totalVotes + ' stemmer';
+
+    // Bars — sort by votes desc
+    const bars = document.getElementById('msl-results-bars');
+    bars.innerHTML = '';
+    const ranked = [...players].sort((a, b) => b.votes - a.votes);
+    ranked.forEach((p, i) => {
+      if (p.votes === 0 && p.name !== myName) return;
+      const pct = totalVotes ? (p.votes / totalVotes) * 100 : 0;
+      const isWinner = winners.includes(p.id);
+      const c = VOTE_COLORS[p.idx % VOTE_COLORS.length];
+      const row = document.createElement('div');
+      row.className = 'ml-bar-row' + (isWinner ? ' winner' : '');
+      row.innerHTML =
+        '<div>' + mlAvatarHTML(p, 32) + '</div>' +
+        '<div>' +
+          '<div class="meta-line">' +
+            '<span class="name">' + escapeHtml(p.name) + (p.name === myName ? ' (du)' : '') + '</span>' +
+            '<span class="vote-num">' + p.votes + '</span>' +
+          '</div>' +
+          '<div class="ml-bar"><div class="fill" style="width:' + pct + '%; background:linear-gradient(90deg,' + c.bg + ',' + c.bg + '); box-shadow:0 0 14px ' + c.glow + ';"></div></div>' +
+        '</div>' +
+        '<div></div>';
+      bars.appendChild(row);
+    });
+
+    // Score card
+    if (me) {
+      document.getElementById('msl-score-avatar').innerHTML = mlAvatarHTML(me, 40);
+    }
+    const sign = myDelta > 0 ? '+' : '';
+    document.getElementById('msl-score-delta').textContent = sign + myDelta + ' poeng';
+    document.getElementById('msl-score-total').textContent = myTotalScore + ' pts';
+
+    const amHost = socket.id === hostId;
+    document.getElementById('msl-host-result-btn').style.display = amHost ? 'block' : 'none';
+    document.getElementById('msl-guest-result-msg').style.display = amHost ? 'none' : 'block';
+    if (amHost) {
+      const btn = document.querySelector('#msl-host-result-btn button');
+      btn.textContent = roundNumber >= totalRounds ? 'Se resultattavle →' : 'Neste runde →';
+    }
+
+    showScreen('screen-msl-results');
+  });
+
+  socket.on('msl_game_over', ({ leaderboard, totalRounds }) => {
+    document.getElementById('msl-board-rounds-pill').textContent = 'Etter ' + totalRounds + ' runder';
+
+    const podium = document.getElementById('msl-podium');
+    podium.innerHTML = '';
+    const top3 = leaderboard.slice(0, 3);
+    const positions = [
+      { rank: 2, idx: 1, cls: 'silver' },
+      { rank: 1, idx: 0, cls: 'gold' },
+      { rank: 3, idx: 2, cls: 'bronze' },
+    ];
+    positions.forEach(({ rank, idx, cls }) => {
+      const p = top3[idx];
+      const col = document.createElement('div');
+      col.className = 'col ' + cls;
+      if (!p) {
+        col.innerHTML = '';
+      } else {
+        const player = { name: p.name, idx: idx };
+        col.innerHTML =
+          mlAvatarHTML(player, idx === 0 ? 60 : 46, { ring: idx === 0 }) +
+          '<div style="text-align:center; margin-bottom:4px;">' +
+            '<div class="name">' + escapeHtml(p.name) + '</div>' +
+            '<div class="pts">' + p.score + ' pts</div>' +
+          '</div>' +
+          '<div class="step">' + rank + '</div>';
+      }
+      podium.appendChild(col);
+    });
+
+    const rest = document.getElementById('msl-board-rest');
+    rest.innerHTML = '';
+    leaderboard.slice(3).forEach((p, i) => {
+      const player = { name: p.name, idx: i + 3 };
+      const row = document.createElement('div');
+      row.className = 'ml-board-row';
+      row.innerHTML =
+        '<span class="rank">' + (i + 4) + '</span>' +
+        mlAvatarHTML(player, 36) +
+        '<span class="name">' + escapeHtml(p.name) + '</span>' +
+        '<span class="pts">' + p.score + ' pts</span>';
+      rest.appendChild(row);
+    });
+
+    showScreen('screen-msl-leaderboard');
+  });
+
   socket.on('hsd_game_over', ({ leaderboard, totalRounds }) => {
     const list = document.getElementById('hsd-leaderboard-list');
     list.innerHTML = '';
@@ -1587,6 +2601,7 @@
     }
     updateRoundPickerUI();
     updateHotSeatRoundPickerUI();
+    updateMslRoundPickerUI();
   });
 </script>
 </body>

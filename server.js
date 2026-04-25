@@ -102,6 +102,61 @@ const QUESTIONS = [
   "Hva er det pinligste du har gjort fordi du trodde ingen fulgte med?"
 ];
 
+const MSL_STATEMENTS = [
+  "glemme telefonen sin hjemme",
+  "havne i fengsel for noe ufarlig",
+  "bli kjendis på TikTok over natten",
+  "spise pizza tre dager på rad",
+  "starte sitt eget selskap før 30",
+  "dra på date med en ekskjæreste igjen",
+  "synge høyt i dusjen klokken 03",
+  "si noe flaut i et jobbintervju",
+  "spise andres mat i kjøleskapet",
+  "bo i utlandet om ti år",
+  "si 'det er en lang historie' og aldri fortelle den",
+  "overleve en zombieapokalypse",
+  "gråte på en film ingen andre gråter på",
+  "sove gjennom alarmen og miste et fly",
+  "starte en podcast ingen hører på",
+  "ringe ekskjæresten klokken to om natta",
+  "ende opp på TV uten å mene det",
+  "krangle med en automat",
+  "snakke med planter når ingen ser",
+  "ha en hemmelig superhelt-identitet",
+  "google symptomene sine og tro de skal dø",
+  "bli sjef innen fem år",
+  "glemme bursdagen til en god venn",
+  "dra på en spontan tur til utlandet i morgen",
+  "bli berømt for noe pinlig",
+  "vinne i lotto og bruke alt på en uke",
+  "si feil navn på en date",
+  "sovne midt i en samtale",
+  "le så høyt at folk snur seg",
+  "ha et skjult talent ingen vet om",
+  "kjøre seg vill i sin egen hjemby",
+  "si ja til noe man absolutt ikke vil gjøre",
+  "klikke 'svar alle' med noe pinlig",
+  "danse alene foran speilet",
+  "ha en altfor sterk mening om en TV-serie",
+  "ende opp i krangel med en taxisjåfør",
+  "glemme passordet til alt",
+  "spise dessert før hovedretten",
+  "kalle læreren 'mamma' eller 'pappa'",
+  "sende en melding til feil person",
+  "bli venn med en helt fremmed på fest",
+  "kjøpe noe dyrt og angre dagen etter",
+  "miste nøklene minst én gang i uka",
+  "snakke med seg selv på t-banen",
+  "ha en helt urealistisk drømmejobb",
+  "bli redd av sin egen skygge",
+  "begynne å gråte av en reklame",
+  "bli kompis med naboens katt",
+  "bestille mat istedenfor å lage noe enkelt",
+  "være den som forteller alle vitser",
+  "ha en mappe full av memes på telefonen",
+  "havne i diskusjon om noe man ikke kan",
+];
+
 function generateCode() {
   return Math.random().toString(36).substring(2, 6).toUpperCase();
 }
@@ -134,6 +189,15 @@ function emitLobbyUpdate(code) {
       players: room.players,
       gameType: room.gameType,
       selectedRounds: room.selectedRounds,
+    });
+    return;
+  }
+
+  if (room.gameType === 'msl') {
+    io.to(code).emit('lobby_update', {
+      players: room.players,
+      gameType: room.gameType,
+      selectedRounds: room.mslRounds,
     });
     return;
   }
@@ -310,11 +374,129 @@ function showHsdLeaderboard(code) {
   });
 }
 
+// ───────── MEST SANNSYNLIG Å ─────────
+function startMslRound(code) {
+  const room = rooms[code];
+  if (!room) return;
+
+  if (!room.mslStatementPool || room.mslStatementPool.length === 0) {
+    room.mslStatementPool = shuffled(MSL_STATEMENTS);
+  }
+  const statement = room.mslStatementPool.shift();
+
+  room.currentRound = {
+    statement,
+    votes: {}, // { voterId: votedForId }
+    roundNumber: room.mslRoundNumber,
+  };
+  room.state = 'msl-voting';
+
+  const playersPayload = room.players.map((p, i) => ({
+    id: p.id,
+    name: p.name,
+    idx: i,
+  }));
+
+  io.to(code).emit('msl_round_start', {
+    statement,
+    players: playersPayload,
+    roundNumber: room.mslRoundNumber,
+    totalRounds: room.mslRounds,
+  });
+}
+
+function showMslResults(code) {
+  const room = rooms[code];
+  if (!room) return;
+
+  const votes = room.currentRound.votes;
+  const counts = {};
+  room.players.forEach((p) => { counts[p.id] = 0; });
+  Object.values(votes).forEach((votedId) => {
+    if (counts[votedId] != null) counts[votedId] += 1;
+  });
+
+  // Find max votes
+  let maxVotes = 0;
+  Object.values(counts).forEach((c) => {
+    if (c > maxVotes) maxVotes = c;
+  });
+  const winners = room.players.filter((p) => counts[p.id] === maxVotes && maxVotes > 0).map((p) => p.id);
+  const isTie = winners.length > 1;
+
+  // Score
+  const deltas = {};
+  room.players.forEach((p) => { deltas[p.id] = 0; });
+  if (winners.length > 0) {
+    Object.entries(votes).forEach(([voterId, votedId]) => {
+      if (winners.includes(votedId)) {
+        deltas[voterId] = isTie ? 1 : 2;
+      }
+    });
+    // Winners get 0 (already initialized)
+  }
+
+  room.players.forEach((p) => {
+    room.mslScores[p.id] = (room.mslScores[p.id] || 0) + (deltas[p.id] || 0);
+  });
+
+  room.state = 'msl-reveal';
+
+  const playersPayload = room.players.map((p, i) => ({
+    id: p.id,
+    name: p.name,
+    idx: i,
+    votes: counts[p.id] || 0,
+  }));
+
+  const totalVotes = Object.values(counts).reduce((s, c) => s + c, 0);
+
+  room.players.forEach((p) => {
+    io.to(p.id).emit('msl_results', {
+      statement: room.currentRound.statement,
+      players: playersPayload,
+      winners, // array of player ids
+      isTie,
+      totalVotes,
+      myDelta: deltas[p.id] || 0,
+      myTotalScore: room.mslScores[p.id] || 0,
+      myVote: votes[p.id] || null,
+      roundNumber: room.mslRoundNumber,
+      totalRounds: room.mslRounds,
+      isHost: room.host,
+    });
+  });
+}
+
+function showMslLeaderboard(code) {
+  const room = rooms[code];
+  if (!room) return;
+
+  room.state = 'game_over';
+
+  const leaderboard = room.players
+    .map((p) => ({
+      name: p.name,
+      score: room.mslScores[p.id] || 0,
+    }))
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.name.localeCompare(b.name, 'no');
+    });
+
+  io.to(code).emit('msl_game_over', {
+    leaderboard,
+    totalRounds: room.mslRounds,
+  });
+}
+
 io.on('connection', (socket) => {
 
   socket.on('create_room', ({ name, gameType }) => {
     const code = generateCode();
-    const selectedGameType = gameType === 'hvem-sendte-det' ? 'hvem-sendte-det' : 'hotseat';
+    let selectedGameType = 'hotseat';
+    if (gameType === 'hvem-sendte-det') selectedGameType = 'hvem-sendte-det';
+    else if (gameType === 'msl') selectedGameType = 'msl';
     rooms[code] = {
       host: socket.id,
       players: [{ id: socket.id, name }],
@@ -331,6 +513,10 @@ io.on('connection', (socket) => {
       hotSeatScores: { [socket.id]: 0 },
       hotSeatOrder: [],
       hotSeatOrderIdx: 0,
+      mslRounds: 5,
+      mslRoundNumber: 0,
+      mslScores: { [socket.id]: 0 },
+      mslStatementPool: [],
     };
     socket.join(code);
     socket.roomCode = code;
@@ -349,6 +535,7 @@ io.on('connection', (socket) => {
     room.players.push({ id: socket.id, name });
     room.hsdScores[socket.id] = room.hsdScores[socket.id] || 0;
     room.hotSeatScores[socket.id] = room.hotSeatScores[socket.id] || 0;
+    room.mslScores[socket.id] = room.mslScores[socket.id] || 0;
     socket.join(upper);
     socket.roomCode = upper;
     socket.emit('joined', { code: upper, isHost: false, name, gameType: room.gameType });
@@ -379,11 +566,23 @@ io.on('connection', (socket) => {
     emitLobbyUpdate(code);
   });
 
+  socket.on('msl_set_rounds', ({ rounds }) => {
+    const code = socket.roomCode;
+    const room = rooms[code];
+    if (!room || room.host !== socket.id) return;
+    if (room.gameType !== 'msl' || room.state !== 'lobby') return;
+
+    const value = Number(rounds);
+    if (!Number.isInteger(value)) return;
+    room.mslRounds = Math.max(1, Math.min(20, value));
+    emitLobbyUpdate(code);
+  });
+
   socket.on('start_game', () => {
     const code = socket.roomCode;
     const room = rooms[code];
     if (!room || room.host !== socket.id) return;
-    const min = room.gameType === 'hvem-sendte-det' ? 3 : 2;
+    const min = (room.gameType === 'hvem-sendte-det' || room.gameType === 'msl') ? 3 : 2;
     if (room.players.length < min) {
       return socket.emit('game_error', `Trenger minst ${min} spillere`);
     }
@@ -394,6 +593,14 @@ io.on('connection', (socket) => {
         room.hsdScores[p.id] = 0;
       });
       startAnsweringRound(code);
+    } else if (room.gameType === 'msl') {
+      room.mslRoundNumber = 1;
+      room.mslScores = {};
+      room.players.forEach((p) => {
+        room.mslScores[p.id] = 0;
+      });
+      room.mslStatementPool = shuffled(MSL_STATEMENTS);
+      startMslRound(code);
     } else {
       room.hotSeatRoundNumber = 1;
       room.hotSeatScores = {};
@@ -422,6 +629,13 @@ io.on('connection', (socket) => {
       }
       room.hsdRoundNumber += 1;
       startAnsweringRound(code);
+    } else if (room.gameType === 'msl') {
+      if (room.mslRoundNumber >= room.mslRounds) {
+        showMslLeaderboard(code);
+        return;
+      }
+      room.mslRoundNumber += 1;
+      startMslRound(code);
     } else {
       if (room.hotSeatRoundNumber >= room.hotSeatTotalRounds) {
         showHotSeatLeaderboard(code);
@@ -511,6 +725,27 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ── Mest sannsynlig events ──
+  socket.on('msl_vote', ({ votedFor }) => {
+    const code = socket.roomCode;
+    const room = rooms[code];
+    if (!room || room.gameType !== 'msl' || room.state !== 'msl-voting') return;
+    if (votedFor === socket.id) return; // can't vote for yourself
+    if (!room.players.find((p) => p.id === votedFor)) return;
+    if (room.currentRound.votes[socket.id]) return; // already voted
+
+    room.currentRound.votes[socket.id] = votedFor;
+
+    io.to(code).emit('msl_vote_count', {
+      count: Object.keys(room.currentRound.votes).length,
+      total: room.players.length,
+    });
+
+    if (Object.keys(room.currentRound.votes).length === room.players.length) {
+      setTimeout(() => showMslResults(code), 500);
+    }
+  });
+
   socket.on('disconnect', () => {
     const code = socket.roomCode;
     if (!code || !rooms[code]) return;
@@ -518,8 +753,12 @@ io.on('connection', (socket) => {
     room.players = room.players.filter(p => p.id !== socket.id);
     delete room.hsdScores[socket.id];
     delete room.hotSeatScores[socket.id];
+    delete room.mslScores[socket.id];
     room.hotSeatOrder = room.hotSeatOrder.filter((id) => id !== socket.id);
     room.hotSeatTotalRounds = room.hotSeatOrder.length;
+    if (room.currentRound && room.currentRound.votes) {
+      delete room.currentRound.votes[socket.id];
+    }
     if (room.players.length === 0) {
       delete rooms[code];
     } else {
@@ -536,5 +775,5 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('\n🎮 Festspill-server klar!\n');
   console.log(`   Lokal:   http://localhost:${PORT}`);
   if (!process.env.PORT) console.log(`   Mobiler: http://${ip}:${PORT}\n`);
-  console.log('Spill:  Hot Seat  ·  Hvem sendte det?\n');
+  console.log('Spill:  Hot Seat  ·  Hvem sendte det?  ·  Mest sannsynlig å…\n');
 });
