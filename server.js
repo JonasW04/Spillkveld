@@ -241,9 +241,14 @@ function pickHotSeatCategory(room, excludeCategory = null) {
     available = CATEGORIES.filter((c) => !used.has(c));
   }
   if (available.length === 0) {
-    room.hotSeatUsedCategories = excludeCategory ? [excludeCategory] : [];
-    available = CATEGORIES.filter((c) => c !== excludeCategory);
-    if (available.length === 0) available = [...CATEGORIES];
+    if (excludeCategory) {
+      room.hotSeatUsedCategories = [excludeCategory];
+      available = CATEGORIES.filter((c) => c !== excludeCategory);
+      if (available.length === 0) return null;
+    } else {
+      room.hotSeatUsedCategories = [];
+      available = [...CATEGORIES];
+    }
   }
 
   const category = available[Math.floor(Math.random() * available.length)];
@@ -1151,7 +1156,10 @@ io.on('connection', (socket) => {
     if (socket.id !== room.currentRound.hotSeatId && socket.id !== room.host) return;
     const previousCategory = room.currentRound.category;
     const nextCategory = pickHotSeatCategory(room, previousCategory);
-    if (!nextCategory || nextCategory === previousCategory) return;
+    if (!nextCategory || nextCategory === previousCategory) {
+      socket.emit('game_error', 'Ingen ny kategori tilgjengelig akkurat nå');
+      return;
+    }
     room.currentRound.category = nextCategory;
 
     io.to(code).emit('hotseat_category_rerolled', {
