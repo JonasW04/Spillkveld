@@ -1850,6 +1850,9 @@
   let mslStatement = '';
   let mslCurrentRound = 0;
   let mslTotalRounds = 0;
+  const SPECIAL_NAME = 'sebastian';
+  const SPECIAL_NAME_CONFIRMED = 'Sebastian';
+  const SPECIAL_NAME_REJECTED = 'Ikke Sebastian';
 
   const AVATAR_COLORS = ['#FF5500','#00E5C3','#9B5DE5','#F15BB5','#FEE440','#00BBF9','#FF9F1C','#2EC4B6'];
   const PAPER_COLORS  = ['#c48a8a','#7a8a6a','#d4a24a','#c66a4a','#6b7a8a','#8a6b7a','#a88a5a','#9a7a8a'];
@@ -1984,11 +1987,12 @@
         if (e.key === 'Tab') {
           e.preventDefault();
           const onYes = document.activeElement === yesBtn;
+          const onNo = document.activeElement === noBtn;
           if (e.shiftKey) {
             if (onYes) noBtn.focus();
             else yesBtn.focus();
           } else {
-            if (document.activeElement === noBtn) yesBtn.focus();
+            if (onNo) yesBtn.focus();
             else noBtn.focus();
           }
         }
@@ -2004,8 +2008,8 @@
         }
         resolve(resolvedName);
       };
-      yesBtn.onclick = () => close('Sebastian');
-      noBtn.onclick = () => close('Ikke Sebastian');
+      yesBtn.onclick = () => close(SPECIAL_NAME_CONFIRMED);
+      noBtn.onclick = () => close(SPECIAL_NAME_REJECTED);
       modal.addEventListener('keydown', onKeyDown);
       modal.classList.add('active');
       modal.setAttribute('aria-hidden', 'false');
@@ -2014,7 +2018,7 @@
   }
 
   async function resolvePlayerName(name) {
-    if (name.toLowerCase() !== 'sebastian') return name;
+    if (name.toLowerCase() !== SPECIAL_NAME) return name;
     return showSebastianIdentityCheck();
   }
 
