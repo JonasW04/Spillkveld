@@ -2352,11 +2352,11 @@
     }
   });
 
-  socket.on('joined', ({ code, gameType }) => {
+  socket.on('joined', ({ code, gameType, isHost: host }) => {
     myCode = code;
     currentGame = gameType;
     applyTheme(gameType);
-    isHost = false;
+    isHost = !!host;
     saveSession();
     if (gameType === 'hvem-sendte-det') {
       document.getElementById('hsd-guest-code').textContent = code;

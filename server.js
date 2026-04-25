@@ -298,7 +298,7 @@ function emitLobbyUpdate(code) {
   const publicPlayers = room.players.map((p) => ({
     id: p.id,
     name: p.name,
-    connected: p.connected !== false,
+    connected: p.connected ?? true,
   }));
 
   if (room.gameType === 'hvem-sendte-det') {
