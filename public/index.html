@@ -1984,13 +1984,12 @@
         if (e.key === 'Tab') {
           e.preventDefault();
           const onYes = document.activeElement === yesBtn;
-          const onNo = document.activeElement === noBtn;
           if (e.shiftKey) {
-            if (onNo) yesBtn.focus();
-            else noBtn.focus();
-          } else {
             if (onYes) noBtn.focus();
             else yesBtn.focus();
+          } else {
+            if (document.activeElement === noBtn) yesBtn.focus();
+            else noBtn.focus();
           }
         }
       };
@@ -2001,7 +2000,7 @@
         modal.classList.remove('active');
         modal.setAttribute('aria-hidden', 'true');
         if (previousFocus && typeof previousFocus.focus === 'function') {
-          try { previousFocus.focus(); } catch (_) { /* element may be detached */ }
+          try { previousFocus.focus(); } catch (error) { /* element may be detached */ }
         }
         resolve(resolvedName);
       };
