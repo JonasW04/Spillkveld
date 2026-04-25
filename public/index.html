@@ -1983,8 +1983,15 @@
       const onKeyDown = (e) => {
         if (e.key === 'Tab') {
           e.preventDefault();
-          if (document.activeElement === yesBtn) noBtn.focus();
-          else yesBtn.focus();
+          const onYes = document.activeElement === yesBtn;
+          const onNo = document.activeElement === noBtn;
+          if (e.shiftKey) {
+            if (onNo) yesBtn.focus();
+            else noBtn.focus();
+          } else {
+            if (onYes) noBtn.focus();
+            else yesBtn.focus();
+          }
         }
       };
       const close = (resolvedName) => {
@@ -1993,7 +2000,9 @@
         modal.removeEventListener('keydown', onKeyDown);
         modal.classList.remove('active');
         modal.setAttribute('aria-hidden', 'true');
-        if (previousFocus && typeof previousFocus.focus === 'function') previousFocus.focus();
+        if (previousFocus && typeof previousFocus.focus === 'function') {
+          try { previousFocus.focus(); } catch (_) {}
+        }
         resolve(resolvedName);
       };
       yesBtn.onclick = () => close('Sebastian');
