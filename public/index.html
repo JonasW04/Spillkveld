@@ -301,6 +301,47 @@
     }
     .error-msg.show { display: block; }
 
+    .identity-check-modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(10, 8, 15, 0.75);
+      z-index: 1000;
+    }
+    .identity-check-modal.active { display: flex; }
+    .identity-check-card {
+      width: 100%;
+      max-width: 360px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .identity-check-card h3 {
+      margin: 0;
+      font-size: 24px;
+      color: #fff;
+    }
+    .identity-check-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+    .identity-check-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .identity-check-actions button { margin: 0; }
+
     @keyframes pulse-anim { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
     .pulse { animation: pulse-anim 2s ease-in-out infinite; }
 
@@ -1769,6 +1810,17 @@
   <button class="btn-primary" onclick="goToFrontPage()" style="margin-top:14px;">Spill igjen</button>
 </div>
 
+<div id="identity-check-modal" class="identity-check-modal" aria-hidden="true">
+  <div class="identity-check-card" role="dialog" aria-modal="true" aria-labelledby="identity-check-title" aria-describedby="identity-check-text">
+    <h3 id="identity-check-title">Identitetssjekk</h3>
+    <p id="identity-check-text">Kom du for sent i dag?</p>
+    <div class="identity-check-actions">
+      <button id="identity-check-yes" class="btn-primary" type="button">Ja</button>
+      <button id="identity-check-no" class="btn-secondary" type="button">Nei</button>
+    </div>
+  </div>
+</div>
+
 <script>
   const socket = io();
   let myName = '';
@@ -1922,20 +1974,48 @@
     else showScreen('screen-home');
   }
 
-  function createRoom() {
-    const name = document.getElementById('create-name').value.trim();
-    if (!name) return showError('create-error', 'Skriv inn navnet ditt');
+  function showSebastianIdentityCheck() {
+    const modal = document.getElementById('identity-check-modal');
+    const yesBtn = document.getElementById('identity-check-yes');
+    const noBtn = document.getElementById('identity-check-no');
+    return new Promise((resolve) => {
+      const close = (resolvedName) => {
+        yesBtn.onclick = null;
+        noBtn.onclick = null;
+        modal.classList.remove('active');
+        modal.setAttribute('aria-hidden', 'true');
+        resolve(resolvedName);
+      };
+      yesBtn.onclick = () => close('Sebastian');
+      noBtn.onclick = () => close('Ikke Sebastian');
+      modal.classList.add('active');
+      modal.setAttribute('aria-hidden', 'false');
+      yesBtn.focus();
+    });
+  }
+
+  async function resolvePlayerName(name) {
+    const trimmed = String(name || '').trim();
+    if (trimmed.toLowerCase() !== 'sebastian') return trimmed;
+    return showSebastianIdentityCheck();
+  }
+
+  async function createRoom() {
+    const enteredName = document.getElementById('create-name').value.trim();
+    if (!enteredName) return showError('create-error', 'Skriv inn navnet ditt');
     if (!currentGame) return showError('create-error', 'Velg et spill først');
+    const name = await resolvePlayerName(enteredName);
     myName = name;
     isHost = true;
     socket.emit('create_room', { name, gameType: currentGame });
   }
 
-  function joinRoom() {
+  async function joinRoom() {
     const code = document.getElementById('join-code').value.trim().toUpperCase();
-    const name = document.getElementById('join-name').value.trim();
+    const enteredName = document.getElementById('join-name').value.trim();
     if (!code || code.length !== 4) return showError('join-error', 'Skriv inn 4-tegns koden');
-    if (!name) return showError('join-error', 'Skriv inn navnet ditt');
+    if (!enteredName) return showError('join-error', 'Skriv inn navnet ditt');
+    const name = await resolvePlayerName(enteredName);
     myName = name;
     socket.emit('join_room', { code, name });
   }
